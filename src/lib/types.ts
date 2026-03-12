@@ -1,0 +1,22 @@
+import { Session } from "next-auth";
+import { JWT } from "next-auth/jwt";
+
+export const CLASSES = ["5", "6", "7", "8", "9", "10"] as const;
+export const SUBJECTS = ["Physics", "Chemistry", "Math"] as const;
+
+export type ClassValue = (typeof CLASSES)[number];
+export type SubjectValue = (typeof SUBJECTS)[number];
+
+export interface ExtendedSession extends Session {
+    accessToken?: string;
+    userId?: string;
+    role?: "student" | "teacher" | null;
+    class?: ClassValue | null;
+}
+
+export interface ExtendedToken extends JWT {
+    accessToken?: string;
+    userId?: string;
+    role?: "student" | "teacher" | null;
+    class?: ClassValue | null;
+}

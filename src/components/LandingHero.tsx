@@ -31,13 +31,14 @@ export function LandingHero() {
                 <div className="flex flex-col md:flex-row items-center justify-center gap-4 pt-8">
                     <button
                         onClick={() => signIn("google")}
-                        className="group relative px-8 py-4 bg-white text-black font-semibold rounded-xl overflow-hidden hover:scale-105 transition-transform duration-300 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]"
+                        className="cursor-pointer group relative px-8 py-4 bg-white text-black font-semibold rounded-xl overflow-hidden hover:scale-105 transition-transform duration-300 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]"
                     >
                         <div className="flex items-center gap-3">
                             <span>Sign in with Google</span>
                             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                         </div>
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
+
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000 pointer-events-none" />
                     </button>
                 </div>
 
