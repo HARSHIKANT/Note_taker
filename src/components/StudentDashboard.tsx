@@ -163,15 +163,43 @@ export function StudentDashboard() {
         });
     };
 
+    // Compress images client-side before upload to stay under Vercel's 4.5MB limit
+    const compressImage = (file: File, maxDim = 1200, quality = 0.75): Promise<File> =>
+        new Promise((resolve) => {
+            if (!file.type.startsWith("image/")) { resolve(file); return; }
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+                let { width, height } = img;
+                if (width > maxDim || height > maxDim) {
+                    if (width > height) { height = Math.round((height * maxDim) / width); width = maxDim; }
+                    else { width = Math.round((width * maxDim) / height); height = maxDim; }
+                }
+                const canvas = document.createElement("canvas");
+                canvas.width = width; canvas.height = height;
+                canvas.getContext("2d")?.drawImage(img, 0, 0, width, height);
+                canvas.toBlob(
+                    (blob) => resolve(blob ? new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" }) : file),
+                    "image/jpeg", quality
+                );
+            };
+            img.onerror = () => resolve(file);
+            img.src = url;
+        });
+
     const handleUpload = async () => {
         if (files.length === 0 || !selectedLecture) return;
         setUploading(true);
         setLogs([]);
 
+        setLogs((prev) => [...prev, `🗌 Compressing ${files.length} images...`]);
+        const compressed = await Promise.all(files.map((f) => compressImage(f)));
+
         const formData = new FormData();
         formData.append("subject", selectedSubject);
         formData.append("lecture_id", selectedLecture.id);
-        files.forEach((file) => formData.append("files", file));
+        compressed.forEach((file) => formData.append("files", file));
 
         try {
             const res = await fetch("/api/bulk-upload", { method: "POST", body: formData });
