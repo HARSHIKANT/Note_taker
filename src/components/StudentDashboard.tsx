@@ -167,7 +167,7 @@ export function StudentDashboard() {
     const compressImage = (file: File, maxDim = 1200, quality = 0.75): Promise<File> =>
         new Promise((resolve) => {
             if (!file.type.startsWith("image/")) { resolve(file); return; }
-            const img = new Image();
+            const img = document.createElement("img") as HTMLImageElement;
             const url = URL.createObjectURL(file);
             img.onload = () => {
                 URL.revokeObjectURL(url);
