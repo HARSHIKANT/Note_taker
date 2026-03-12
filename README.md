@@ -1,4 +1,4 @@
-# 📓 NoteTaker AI
+# 📓 NoteTaker AI BY Harshikant Dubey
 
 An AI-powered note-taking assistant for classrooms. Students upload photos of their handwritten notes; the system uses **Gemini 2.5 Flash** to extract text via OCR, then intelligently compares those notes against the teacher's lecture transcript and grades them.
 
