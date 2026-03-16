@@ -18,10 +18,10 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "lecture_id required" }, { status: 400 });
     }
 
-    // Verify this lecture belongs to the teacher
+    // Verify this lecture belongs to the teacher and fetch its AI detection insights
     const { data: lecture } = await supabase
         .from("lectures")
-        .select("id")
+        .select("id, ai_detection_insights")
         .eq("id", lectureId)
         .eq("teacher_id", session.userId)
         .single();
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     // Get submissions with student info
     const { data, error } = await supabase
         .from("uploads")
-        .select("id, student_email, file_id, ocr_text, match_score, ai_feedback, ocr_status, created_at, student_id")
+        .select("id, student_email, file_id, ocr_text, match_score, ai_feedback, ocr_status, ai_probability, human_probability, ai_explanation, created_at, student_id")
         .eq("lecture_id", lectureId)
         .order("created_at", { ascending: false });
 
@@ -61,5 +61,5 @@ export async function GET(req: NextRequest) {
         student_name: d.student_id ? students[d.student_id]?.name : d.student_email,
     }));
 
-    return NextResponse.json({ submissions });
+    return NextResponse.json({ submissions, ai_detection_insights: lecture.ai_detection_insights });
 }

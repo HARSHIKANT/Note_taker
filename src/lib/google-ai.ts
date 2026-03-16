@@ -138,6 +138,9 @@ export interface MatchResult {
     feedback: string;
     covered: string[];
     missing: string[];
+    aiProbability?: number;
+    humanProbability?: number;
+    explanation?: string;
 }
 
 export async function compareNotesWithLecture(
@@ -147,7 +150,18 @@ export async function compareNotesWithLecture(
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    const prompt = `You are an educational AI assistant. Compare a student's handwritten notes (extracted via OCR) with the teacher's lecture transcript.
+    const prompt = `You are a strict educational AI assistant and forensic text analyzer. You have two distinct tasks:
+
+TASK 1: Note Comparison
+Compare a student's handwritten notes (extracted via OCR) with the teacher's lecture transcript.
+Analyze how well the student's notes cover the key concepts from the lecture.
+
+TASK 2: Aggressive AI Detection
+Determine if the student's notes appear AI-generated (e.g. ChatGPT, Claude) or authentically human-written. 
+WARNING: Many students use AI to generate fake notes. You must be extremely strict and skeptical.
+- AI Signs (HIGH AI PROBABILITY > 80%): Flawless formatting, perfect grammar, highly structured bullet points, using words like "delve", "furthermore", "in conclusion", robotic/uniform sentence lengths, lack of personal shorthand or abbreviations, feeling "too perfect" or synthetic.
+- Human Signs (HIGH HUMAN PROBABILITY): Typos, messy logical leaps, heavy use of abbreviations (e.g., "b/c", "w/"), informal arrows/symbols, incomplete thoughts, rambling.
+If the text reads like a perfectly structured textbook summary rather than messy personal student notes, score it high for AI.
 
 LECTURE TRANSCRIPT:
 """
@@ -159,11 +173,14 @@ STUDENT'S NOTES (OCR):
 ${ocrText}
 """
 
-Analyze how well the student's notes cover the key concepts from the lecture. Return a JSON object with:
+Return a JSON object with the following fields depending on the analysis of BOTH tasks:
 - "score": number from 0 to 100 representing percentage of key concepts covered
 - "feedback": one paragraph summary of the student's note quality
 - "covered": array of key topics the student captured well
 - "missing": array of important topics the student missed
+- "aiProbability": number from 0 to 100 representing the probability that the text is AI-generated
+- "humanProbability": number from 0 to 100 representing the probability that the text is human-written
+- "explanation": a crisp, to-the-point explanation (less than 10 words) of why it was flagged as AI or human.
 
 Return ONLY valid JSON, nothing else.`;
 
@@ -181,6 +198,9 @@ Return ONLY valid JSON, nothing else.`;
             feedback: "Could not analyze notes. Please try again.",
             covered: [],
             missing: [],
+            aiProbability: 0,
+            humanProbability: 0,
+            explanation: "Analysis failed",
         };
     }
 }
