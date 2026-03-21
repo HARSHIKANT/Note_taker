@@ -184,7 +184,7 @@ Return a JSON object with the following fields depending on the analysis of BOTH
 
 Return ONLY valid JSON, nothing else.`;
 
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent(prompt, { temperature: 0 }); // Set temperature to 0 for deterministic output
     const responseText = result.response.text();
 
     // Parse JSON from response (strip markdown code fences if present)
