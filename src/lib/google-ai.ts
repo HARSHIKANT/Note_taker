@@ -74,7 +74,7 @@ export async function ocrImageFromDrive(
     );
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });mperature: 0 });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     // Build the parts array for Gemini, containing all images
     const parts: any[] = downloads.map((d) => ({
@@ -115,7 +115,7 @@ export async function transcribeRecording(
 
     // 2. Send to Gemini for transcription
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", temperature: 0 });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const result = await model.generateContent([
         {
@@ -148,7 +148,7 @@ export async function compareNotesWithLecture(
     lectureContent: string
 ): Promise<MatchResult> {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", temperature: 0 });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `You are a strict educational AI assistant and forensic text analyzer. You have two distinct tasks:
 
@@ -184,7 +184,7 @@ Return a JSON object with the following fields depending on the analysis of BOTH
 
 Return ONLY valid JSON, nothing else.`;
 
-    const result = await model.generateContent(prompt);mperature here if supported
+    const result = await model.generateContent(prompt);
     const responseText = result.response.text();
 
     // Parse JSON from response (strip markdown code fences if present)
