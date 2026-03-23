@@ -74,7 +74,10 @@ export async function ocrImageFromDrive(
     );
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: { temperature: 0 }
+    });
 
     // Build the parts array for Gemini, containing all images
     const parts: any[] = downloads.map((d) => ({
@@ -115,7 +118,10 @@ export async function transcribeRecording(
 
     // 2. Send to Gemini for transcription
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: { temperature: 0 }
+    });
 
     const result = await model.generateContent([
         {
@@ -148,7 +154,13 @@ export async function compareNotesWithLecture(
     lectureContent: string
 ): Promise<MatchResult> {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: {
+            temperature: 0, // 0 ensures deterministic scoring
+            responseMimeType: "application/json"
+        }
+    });
 
     const prompt = `You are a strict educational AI assistant and forensic text analyzer. You have two distinct tasks:
 
@@ -156,12 +168,13 @@ TASK 1: Note Comparison
 Compare a student's handwritten notes (extracted via OCR) with the teacher's lecture transcript.
 Analyze how well the student's notes cover the key concepts from the lecture.
 
-TASK 2: Aggressive AI Detection
-Determine if the student's notes appear AI-generated (e.g. ChatGPT, Claude) or authentically human-written. 
-WARNING: Many students use AI to generate fake notes. You must be extremely strict and skeptical.
-- AI Signs (HIGH AI PROBABILITY > 80%): Flawless formatting, perfect grammar, highly structured bullet points, using words like "delve", "furthermore", "in conclusion", robotic/uniform sentence lengths, lack of personal shorthand or abbreviations, feeling "too perfect" or synthetic.
-- Human Signs (HIGH HUMAN PROBABILITY): Typos, messy logical leaps, heavy use of abbreviations (e.g., "b/c", "w/"), informal arrows/symbols, incomplete thoughts, rambling.
-If the text reads like a perfectly structured textbook summary rather than messy personal student notes, score it high for AI.
+TASK 2: Forensic AI Analysis (Detection)
+Conduct a deep-layer linguistic audit to determine if the notes are an organic human byproduct or a synthetic AI summary. You must be extremely skeptical of "clean" notes.
+Structural Smoothing (AI High Signal): Does the text reorganize a rambling transcript into a perfectly optimized logical hierarchy (e.g., Introduction, Key Points, Conclusion) that the speaker never explicitly structured?
+Syntactic Parallelism (AI High Signal): Do bullet points exhibit repetitive grammatical structures (e.g., every line starting with an action verb or gerund)? Humans in real-time environments rarely maintain this level of consistency.
+Information Density (AI High Signal): Does the text include "high-level summaries" of complex sections that were only briefly mentioned in the transcript? AI tends to "hallucinate" broader context it already knows about a topic.
+Temporal Friction (Human High Signal): Are there "messy" logical leaps, idiosyncratic abbreviations (e.g., "w/o", "b/c", "stats"), or a focus on specific anecdotes/verbal tics that an AI would typically "clean out" as noise?
+OCR Artifacts: Look for character-level glitches. If the notes are perfectly formatted Markdown without a single OCR error from handwriting, treat it as a digital copy-paste (High AI Probability).
 
 LECTURE TRANSCRIPT:
 """
@@ -175,7 +188,7 @@ ${ocrText}
 
 Return a JSON object with the following fields depending on the analysis of BOTH tasks:
 - "score": number from 0 to 100 representing percentage of key concepts covered
-- "feedback": one paragraph summary of the student's note quality
+- "feedback": 50 words summary of the student's note quality
 - "covered": array of key topics the student captured well
 - "missing": array of important topics the student missed
 - "aiProbability": number from 0 to 100 representing the probability that the text is AI-generated
