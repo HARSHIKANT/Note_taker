@@ -12,6 +12,7 @@ export interface ExtendedSession extends Session {
     userId?: string;
     role?: "student" | "teacher" | null;
     class?: ClassValue | null;
+    isHeadTeacher?: boolean;
 }
 
 export interface ExtendedToken extends JWT {
@@ -19,4 +20,5 @@ export interface ExtendedToken extends JWT {
     userId?: string;
     role?: "student" | "teacher" | null;
     class?: ClassValue | null;
+    isHeadTeacher?: boolean;
 }

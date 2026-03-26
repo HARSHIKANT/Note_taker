@@ -32,7 +32,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 if (email) {
                     const { data: existingUser } = await supabase
                         .from("users")
-                        .select("id, role, class")
+                        .select("id, role, class, is_head_teacher")
                         .eq("email", email)
                         .single();
 
@@ -40,6 +40,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         token.userId = existingUser.id;
                         token.role = existingUser.role;
                         token.class = existingUser.class;
+                        token.isHeadTeacher = existingUser.is_head_teacher ?? false;
                     } else {
                         const { data: newUser } = await supabase
                             .from("users")
@@ -61,7 +62,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             if ((trigger === "update" || !token.role) && token.email) {
                 const { data: user } = await supabase
                     .from("users")
-                    .select("id, role, class")
+                    .select("id, role, class, is_head_teacher")
                     .eq("email", token.email as string)
                     .single();
 
@@ -69,6 +70,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     token.userId = user.id;
                     token.role = user.role;
                     token.class = user.class;
+                    token.isHeadTeacher = user.is_head_teacher ?? false;
                 }
             }
 
@@ -83,6 +85,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 userId: t.userId,
                 role: t.role,
                 class: t.class,
+                isHeadTeacher: t.isHeadTeacher ?? false,
             };
         },
     },

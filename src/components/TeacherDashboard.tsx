@@ -2,17 +2,20 @@
 
 import { useState } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { LogOut, ChevronLeft } from "lucide-react";
+import { LogOut, ChevronLeft, BarChart2 } from "lucide-react";
 import { Lecture, Submission } from "./dashboard/types";
 import { SubjectsView } from "./dashboard/SubjectsView";
 import { LecturesView } from "./dashboard/LecturesView";
 import { NewLectureView } from "./dashboard/NewLectureView";
 import { SubmissionsView } from "./dashboard/SubmissionsView";
+import { TeacherAnalyticsView } from "./dashboard/TeacherAnalyticsView";
+import { HeadTeacherAnalyticsView } from "./dashboard/HeadTeacherAnalyticsView";
 
-type View = "subjects" | "lectures" | "new-lecture" | "submissions";
+type View = "subjects" | "lectures" | "new-lecture" | "submissions" | "analytics";
 
 export function TeacherDashboard() {
     const { data: session } = useSession();
+    const isHeadTeacher = (session as any)?.isHeadTeacher ?? false;
 
     const [view, setView] = useState<View>("subjects");
     const [selectedSubject, setSelectedSubject] = useState<string>("");
@@ -59,24 +62,36 @@ export function TeacherDashboard() {
                     subject: selectedSubject,
                     class: data.targetClass,
                     content: data.transcript,
+                    audio_insights: null,
                 }),
             });
             const resData = await res.json();
 
-            if (res.ok && publish) {
+            if (!res.ok) {
+                alert("Error: " + resData.error);
+                return;
+            }
+
+            const lectureId = resData.lecture?.id;
+
+            // Publish
+            if (publish && lectureId) {
                 await fetch("/api/lectures", {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ id: resData.lecture.id, published: true }),
+                    body: JSON.stringify({ id: lectureId, published: true }),
                 });
+
+                // Auto-analyse transcript in the background (no await — don't block the user)
+                fetch("/api/lectures/analyze-text", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ transcript: data.transcript, lectureId }),
+                }).catch((err) => console.error("[Analytics] Auto-analysis failed:", err));
             }
 
-            if (res.ok) {
-                setView("lectures");
-                fetchLectures(selectedSubject);
-            } else {
-                alert("Error: " + resData.error);
-            }
+            setView("lectures");
+            fetchLectures(selectedSubject);
         } catch (err: any) {
             alert("Error: " + err.message);
         }
@@ -145,17 +160,39 @@ export function TeacherDashboard() {
                             </button>
                         )}
                         <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
+                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm ${isHeadTeacher
+                                    ? "bg-gradient-to-tr from-amber-400 to-orange-500 shadow-md shadow-amber-500/30"
+                                    : "bg-gradient-to-tr from-blue-500 to-cyan-500"
+                                }`}>
                                 {session?.user?.name?.[0] || "T"}
                             </div>
                             <div>
-                                <p className="font-semibold text-white text-sm">{session?.user?.name}</p>
-                                <p className="text-xs text-neutral-500">Teacher</p>
+                                <p className="font-semibold text-white text-sm flex items-center gap-1.5">
+                                    {session?.user?.name}
+                                    {isHeadTeacher && (
+                                        <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 border border-amber-400/30 px-1.5 py-0.5 rounded-full">HEAD</span>
+                                    )}
+                                </p>
+                                <p className="text-xs text-neutral-500">{isHeadTeacher ? "Head Teacher" : "Teacher"}</p>
                             </div>
                         </div>
                     </div>
-                    <button onClick={() => signOut()} className="p-2 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors">
+                    <button
+                        onClick={() => setView(view === "analytics" ? "subjects" : "analytics")}
+                        className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition-colors ${view === "analytics"
+                            ? isHeadTeacher ? "bg-amber-500/20 text-amber-400" : "bg-blue-600 text-white"
+                            : isHeadTeacher ? "hover:bg-amber-500/10 text-amber-600 hover:text-amber-400" : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
+                            }`}
+                    >
+                        <BarChart2 className="w-5 h-5" />
+                        <span className="text-[9px] font-medium leading-none">Analytics</span>
+                    </button>
+                    <button
+                        onClick={() => signOut()}
+                        className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                    >
                         <LogOut className="w-5 h-5" />
+                        <span className="text-[9px] font-medium leading-none">Sign out</span>
                     </button>
                 </div>
             </div>
@@ -192,6 +229,12 @@ export function TeacherDashboard() {
                         insights={insights}
                         aiDetectionInsights={aiDetectionInsights}
                     />
+                )}
+
+                {view === "analytics" && (
+                    isHeadTeacher
+                        ? <HeadTeacherAnalyticsView myId={(session as any)?.userId ?? ""} />
+                        : <TeacherAnalyticsView isHeadTeacher={false} />
                 )}
             </div>
         </div>

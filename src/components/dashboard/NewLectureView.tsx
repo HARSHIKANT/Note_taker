@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useRef } from "react";
 import { Loader2, Check, Mic, Eye } from "lucide-react";
 import { CLASSES } from "@/lib/types";
@@ -23,28 +25,27 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
 
         setTranscribing(true);
         try {
-            const formData = new FormData();
-            formData.append("subject", selectedSubject);
-            formData.append("files", file);
+            // Step 1: Upload via backend (uses service key, bypasses RLS)
+            const uploadForm = new FormData();
+            uploadForm.append("file", file);
 
-            const uploadRes = await fetch("/api/bulk-upload", {
+            const uploadRes = await fetch("/api/lectures/upload-audio", {
                 method: "POST",
-                body: formData,
+                body: uploadForm,
             });
             const uploadData = await uploadRes.json();
 
-            if (!uploadRes.ok || uploadData.failCount > 0) {
-                alert("Failed to upload recording");
+            if (!uploadRes.ok) {
+                alert("Failed to upload recording: " + uploadData.error);
                 setTranscribing(false);
                 return;
             }
 
-            const fileId = uploadData.results[0].fileId;
-
+            // Step 2: Transcribe — returns labelled transcript text
             const transcribeRes = await fetch("/api/lectures/transcribe", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ fileId, mimeType: file.type }),
+                body: JSON.stringify({ filePath: uploadData.filePath, mimeType: file.type }),
             });
 
             const transcribeData = await transcribeRes.json();
@@ -106,7 +107,9 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
 
                 {/* Recording Upload */}
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-neutral-400">Upload Recording</label>
+                    <label className="text-sm font-medium text-neutral-400">
+                        Upload Recording <span className="text-neutral-600">(optional)</span>
+                    </label>
                     <input
                         type="file"
                         accept="audio/*,video/*"
@@ -120,7 +123,7 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
                         className="w-full p-4 rounded-xl border-2 border-dashed border-neutral-800 hover:border-neutral-700 transition-colors flex items-center justify-center gap-3 text-neutral-400 hover:text-white disabled:opacity-50"
                     >
                         {transcribing ? (
-                            <><Loader2 className="w-5 h-5 animate-spin" /> Transcribing...</>
+                            <><Loader2 className="w-5 h-5 animate-spin" /> Transcribing audio...</>
                         ) : recordingFile ? (
                             <><Check className="w-5 h-5 text-green-400" /> {recordingFile.name}</>
                         ) : (
@@ -141,6 +144,7 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
                         rows={10}
                         className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
                     />
+                    <p className="text-xs text-neutral-600">AI classroom analysis (interaction %, tone, safety check) runs automatically when you publish.</p>
                 </div>
 
                 {/* Actions */}

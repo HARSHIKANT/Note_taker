@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { title, subject, class: targetClass, content, recording_file_id } = body;
+    const { title, subject, class: targetClass, content, recording_file_id, audio_insights } = body;
 
     if (!title || !subject || !targetClass || !content) {
         return NextResponse.json({ error: "Missing fields" }, { status: 400 });
@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
             class: targetClass,
             content,
             recording_file_id: recording_file_id || null,
+            audio_insights: audio_insights || null,
             published: false,
         })
         .select()
