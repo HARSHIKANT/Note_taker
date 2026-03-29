@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Loader2, Check, Mic, Eye } from "lucide-react";
+import { Loader2, Check, Mic, Eye, Lock, PenLine } from "lucide-react";
 import { CLASSES } from "@/lib/types";
 
 interface NewLectureViewProps {
@@ -14,6 +14,7 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
     const [targetClass, setTargetClass] = useState<string>("");
     const [transcript, setTranscript] = useState("");
     const [recordingFile, setRecordingFile] = useState<File | null>(null);
+    const [isAudioTranscript, setIsAudioTranscript] = useState(false); // true = locked (auto-generated from audio)
     const [transcribing, setTranscribing] = useState(false);
     const [saving, setSaving] = useState(false);
     const recordingInputRef = useRef<HTMLInputElement>(null);
@@ -52,6 +53,7 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
 
             if (transcribeRes.ok) {
                 setTranscript(transcribeData.transcript);
+                setIsAudioTranscript(true); // Lock transcript — it came from audio, teacher cannot edit
             } else {
                 alert("Transcription failed: " + transcribeData.error);
             }
@@ -134,17 +136,41 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
 
                 {/* Transcript */}
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-neutral-400">
-                        Transcript {transcript && "(editable)"}
+                    <label className="text-sm font-medium text-neutral-400 flex items-center gap-1.5">
+                        Transcript
+                        {!isAudioTranscript && transcript && (
+                            <span className="flex items-center gap-1 text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">
+                                <PenLine className="w-3 h-3" /> Editable
+                            </span>
+                        )}
                     </label>
-                    <textarea
-                        value={transcript}
-                        onChange={(e) => setTranscript(e.target.value)}
-                        placeholder="Upload a recording to auto-generate transcript, or type/paste lecture content here..."
-                        rows={10}
-                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
-                    />
-                    <p className="text-xs text-neutral-600">AI classroom analysis (interaction %, tone, safety check) runs automatically when you publish.</p>
+                    
+                    {isAudioTranscript ? (
+                        <div className="w-full bg-amber-950/20 border border-amber-900/40 rounded-xl px-5 py-6 flex flex-col items-center justify-center gap-3 text-center">
+                            <div className="w-12 h-12 bg-amber-500/10 rounded-full flex items-center justify-center">
+                                <Lock className="w-6 h-6 text-amber-500" />
+                            </div>
+                            <div>
+                                <h3 className="text-amber-500 font-medium">Auto-generated & Locked</h3>
+                                <p className="text-sm text-neutral-400 mt-1 max-w-sm mx-auto">
+                                    The transcript has been securely generated from your audio file. It is hidden from view to ensure analysis integrity.
+                                </p>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <textarea
+                                value={transcript}
+                                onChange={(e) => setTranscript(e.target.value)}
+                                placeholder="Upload a recording to auto-generate transcript, or type/paste lecture content here..."
+                                rows={10}
+                                className="w-full border bg-neutral-900 border-neutral-800 focus:ring-2 focus:ring-blue-600 rounded-xl px-4 py-3 text-white placeholder-neutral-600 focus:outline-none resize-none transition-colors"
+                            />
+                            <p className="text-xs text-neutral-600">
+                                AI classroom analysis (interaction %, tone, safety check) runs automatically when you publish.
+                            </p>
+                        </>
+                    )}
                 </div>
 
                 {/* Actions */}

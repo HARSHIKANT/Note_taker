@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { ocrImageFromDrive, compareNotesWithLecture } from "@/lib/google-ai";
+import { ocrImageFromDrive, compareNotesWithLecture, callWithModelFallback } from "@/lib/google-ai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { ExtendedSession } from "@/lib/types";
 
@@ -182,7 +182,6 @@ export async function POST(req: NextRequest) {
                 if (allMissingTopics.length > 0) {
                     try {
                         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-                        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
                         // Get lecture title for better context
                         const { data: lec } = await supabase
@@ -204,13 +203,19 @@ Your task:
 
 Return ONLY valid JSON. Nothing else.`;
 
-                        const result = await model.generateContent(prompt);
-                        const responseText = result.response.text();
-                        const cleaned = responseText.replace(/```json\n?|\n?```/g, "").trim();
-                        const parsed = JSON.parse(cleaned);
+                        // Model fallback: primary → gemini-3-flash → gemini-3.1-flash-lite (with round-based waits)
+                        const insightRaw = await callWithModelFallback("Insights", async (modelName) => {
+                            const model = genAI.getGenerativeModel({ model: modelName });
+                            const result = await model.generateContent(prompt);
+                            return result.response.text();
+                        });
 
-                        if (parsed.summary) missedConceptsSummary = parsed.summary;
-                        if (parsed.top_missed) aggregatedMissingList = parsed.top_missed;
+                        if (insightRaw) {
+                            const cleaned = insightRaw.replace(/```json\n?|\n?```/g, "").trim();
+                            const parsed = JSON.parse(cleaned);
+                            if (parsed.summary) missedConceptsSummary = parsed.summary;
+                            if (parsed.top_missed) aggregatedMissingList = parsed.top_missed;
+                        }
                     } catch (err) {
                         console.error("Failed to aggregate insights via AI:", err);
                         missedConceptsSummary = "Failed to load AI insights.";

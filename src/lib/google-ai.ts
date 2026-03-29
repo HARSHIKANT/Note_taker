@@ -7,6 +7,54 @@ import * as path from "path";
 import * as os from "os";
 import sharp from "sharp";
 
+// ── Model Fallback Chain ────────────────────────────────────────────────────
+// Primary → Fallback 1 → Fallback 2, with up to 3 retry rounds (0s, 20s, 40s wait)
+export const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite-preview"] as const;
+const RETRY_WAIT_MS = [0, 20_000, 40_000]; // wait before round 2 and 3
+
+export function isRateLimitError(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota");
+}
+
+/**
+ * Tries modelFn with each model in GEMINI_MODELS.
+ * If all rate-limit, waits and retries (up to 3 rounds: immediate → 20s → 40s).
+ * Non-rate-limit errors throw immediately.
+ */
+export async function callWithModelFallback<T>(
+    label: string,
+    modelFn: (modelName: string) => Promise<T>
+): Promise<T> {
+    let lastError: unknown;
+
+    for (let round = 0; round < RETRY_WAIT_MS.length; round++) {
+        if (round > 0) {
+            const waitSec = RETRY_WAIT_MS[round] / 1000;
+            console.warn(`[${label}] All models rate-limited. Waiting ${waitSec}s before retry round ${round + 1}/${RETRY_WAIT_MS.length}...`);
+            await new Promise((r) => setTimeout(r, RETRY_WAIT_MS[round]));
+        }
+
+        for (const modelName of GEMINI_MODELS) {
+            try {
+                console.log(`[${label}] Trying model: ${modelName} (round ${round + 1})...`);
+                const result = await modelFn(modelName);
+                console.log(`[${label}] ${modelName} succeeded.`);
+                return result;
+            } catch (err) {
+                if (isRateLimitError(err)) {
+                    console.warn(`[${label}] Rate limit on ${modelName}.`);
+                    lastError = err;
+                    continue;
+                }
+                throw err; // Non-rate-limit errors propagate immediately
+            }
+        }
+    }
+
+    throw lastError ?? new Error(`[${label}] All models and retry rounds exhausted`);
+}
+
 // ── Helper: Download file from Drive as Buffer ──────────────────────
 async function downloadFromDrive(
     accessToken: string,
@@ -66,49 +114,70 @@ async function downloadFromDrive(
     return { buffer, mimeType: origMimeType };
 }
 
-// ── OCR: Gemini 2.5 Flash (Primary) ──────────────────────────────────
+// ── OCR: with model fallback chain + round-based retry ──────────────────────
 export async function ocrImageFromDrive(
     accessToken: string,
     fileIds: string[]
 ): Promise<string> {
-    console.log(`[OCR] Using Gemini 2.5 Flash for OCR on ${fileIds.length} images...`);
-
-    // Download all images in parallel
+    // Download all images in parallel (only once — reused across all retries)
     const downloads = await Promise.all(
         fileIds.map((id) => downloadFromDrive(accessToken, id))
     );
 
+    const parts: any[] = [
+        ...downloads.map((d) => ({ inlineData: { mimeType: d.mimeType, data: d.buffer.toString("base64") } })),
+        { text: "Extract ALL text from these images of handwritten notes. Organize and structure the extracted text logically (e.g., using headings, bullet points, and appropriate formatting based on the layout of the notes). Combine the text from all pages cohesively. Output ONLY the structured text content, nothing else. If no text is found, respond with exactly: NO_TEXT_FOUND" },
+    ];
+
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
-        generationConfig: { temperature: 0 }
+
+    const extractedText = await callWithModelFallback("OCR", async (modelName) => {
+        const model = genAI.getGenerativeModel({ model: modelName, generationConfig: { temperature: 0 } });
+        const result = await model.generateContent(parts);
+        const text = result.response.text().trim();
+        console.log(`[OCR] ${modelName} extracted text length: ${text.length} chars`);
+        return text;
     });
-
-    // Build the parts array for Gemini, containing all images
-    const parts: any[] = downloads.map((d) => ({
-        inlineData: { mimeType: d.mimeType, data: d.buffer.toString("base64") },
-    }));
-
-    // Add the prompt instruction
-    parts.push({
-        text: "Extract ALL text from these images of handwritten notes. Organize and structure the extracted text logically (e.g., using headings, bullet points, and appropriate formatting based on the layout of the notes). Combine the text from all pages cohesively. Output ONLY the structured text content, nothing else. If no text is found, respond with exactly: NO_TEXT_FOUND",
-    });
-
-    const result = await model.generateContent(parts);
-
-    const extractedText = result.response.text().trim();
-    console.log(`[OCR] Gemini extracted structured text length: ${extractedText.length} chars`);
 
     return extractedText === "NO_TEXT_FOUND" ? "" : extractedText;
 }
 
 // ── Types: Audio Transcription Result ─────────────────────────────────
+
+export interface ContentQualityParameter {
+    score: number;   // 0–10
+    note: string;    // 1-sentence justification
+}
+
+export interface ContentQuality {
+    overall_score: number;         // 0–100 weighted average
+    explanation_quality: ContentQualityParameter;
+    title_relevance: ContentQualityParameter;
+    content_correctness: ContentQualityParameter;
+    depth_and_coverage: ContentQualityParameter;
+    engagement_style: ContentQualityParameter;
+}
+
+export interface ToneDimension {
+    detected: boolean;
+    severity: "low" | "medium" | "high" | null;
+    examples: string[];  // up to 2 quoted excerpts
+}
+
+export interface ToneAnalysis {
+    harsh_language: ToneDimension;
+    emotional_statements: ToneDimension;
+    negative_statements: ToneDimension;
+}
+
 export interface AudioInsights {
     student_interaction_percentage: number;  // 0–100
     abusive_language_detected: boolean;
     abusive_language_details: string | null;
     class_tone: string;
     key_interactions_summary: string;
+    content_quality: ContentQuality | null;
+    tone_analysis: ToneAnalysis | null;
 }
 
 export interface AudioTranscriptionResult {
@@ -145,24 +214,8 @@ export async function transcribeRecordingFromSupabase(
 
     console.log(`[Transcription] Gemini generating transcript using file URI: ${uploadResult.file.uri}`);
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
-        generationConfig: {
-            temperature: 0,
-            responseMimeType: "application/json",
-            maxOutputTokens: 8192
-        }
-    });
 
-    const result = await model.generateContent([
-        {
-            fileData: {
-                mimeType: uploadResult.file.mimeType,
-                fileUri: uploadResult.file.uri
-            }
-        },
-        {
-            text: `You are a Classroom Audio Auditor. Listen to this lecture recording carefully and perform two tasks:
+    const TRANSCRIPTION_PROMPT = `You are a Classroom Audio Auditor. Listen to this lecture recording carefully and perform the following analysis.
 
 TASK 1 - SPEAKER DIARIZATION TRANSCRIPT:
 Transcribe the entire recording. Label each speaker as [Teacher] or [Student].
@@ -171,12 +224,28 @@ Transcribe the entire recording. Label each speaker as [Teacher] or [Student].
 Format: "[Teacher]: text... [Student]: text..."
 
 TASK 2 - CLASSROOM INSIGHTS:
-Based on the audio, calculate and flag the following:
+Based on the audio, produce ALL of the following fields:
+
+Basic metrics:
 - student_interaction_percentage: Estimate the percentage of the total speaking time taken up by students (0–100).
 - abusive_language_detected: true if the teacher used abusive, discriminatory, or inappropriate language. false otherwise.
-- abusive_language_details: If flagged, give a very brief factual description of what was said. Otherwise null.
-- class_tone: A short phrase describing the overall atmosphere (e.g., "Formal and one-directional", "Interactive and encouraging").
+- abusive_language_details: If flagged, give a very brief factual description. Otherwise null.
+- class_tone: A short phrase describing the overall atmosphere.
 - key_interactions_summary: 1-2 sentences summarizing the main student interactions.
+
+Content Quality (score each parameter 0–10):
+- explanation_quality: Is the explanation clear, step-by-step, accessible? Does the teacher use examples/analogies?
+- title_relevance: How well does the lecture title match what was actually taught?
+- content_correctness: Are facts, formulas, and definitions accurate? Flag any errors.
+- depth_and_coverage: Is the topic explored thoroughly? Are subtopics given appropriate time?
+- engagement_style: Does the teacher use questions, stories, real-world examples to engage students?
+For each: provide a score (0–10) and a one-sentence note. Compute overall_score as a weighted average (0–100).
+
+Tone & Language Analysis (beyond abusive flag):
+- harsh_language: Dismissive, belittling, or condescending phrases toward students.
+- emotional_statements: Expressions of frustration, favoritism, or over-emotional reactions.
+- negative_statements: Demotivating comments that discourage learning.
+For each: detected (boolean), severity ("low"|"medium"|"high"|null), examples (array of up to 2 quoted excerpts — empty array if none).
 
 Return ONLY a valid JSON object. Nothing else.
 {
@@ -186,13 +255,34 @@ Return ONLY a valid JSON object. Nothing else.
     "abusive_language_detected": false,
     "abusive_language_details": null,
     "class_tone": "Interactive and encouraging",
-    "key_interactions_summary": "Students asked 3 questions about Newton's second law."
+    "key_interactions_summary": "Students asked 3 questions about Newton's second law.",
+    "content_quality": {
+      "overall_score": 74,
+      "explanation_quality": { "score": 8, "note": "Clear step-by-step with good examples." },
+      "title_relevance": { "score": 9, "note": "Content closely matched the stated title." },
+      "content_correctness": { "score": 7, "note": "Minor error in Third Law example." },
+      "depth_and_coverage": { "score": 6, "note": "Friction subtopic was rushed." },
+      "engagement_style": { "score": 5, "note": "Few student questions were posed." }
+    },
+    "tone_analysis": {
+      "harsh_language": { "detected": false, "severity": null, "examples": [] },
+      "emotional_statements": { "detected": true, "severity": "low", "examples": ["'I really hope you all study this tonight.'"] },
+      "negative_statements": { "detected": false, "severity": null, "examples": [] }
+    }
   }
-}`,
-        },
-    ]);
+}`;
 
-    const raw = result.response.text().trim();
+    const raw = await callWithModelFallback("Transcription", async (modelName) => {
+        const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: { temperature: 0, responseMimeType: "application/json", maxOutputTokens: 8192 },
+        });
+        const result = await model.generateContent([
+            { fileData: { mimeType: uploadResult.file.mimeType, fileUri: uploadResult.file.uri } },
+            { text: TRANSCRIPTION_PROMPT },
+        ]);
+        return result.response.text().trim();
+    });
 
     console.log(`[Transcription] Deleting file from Gemini Storage...`);
     try {
@@ -215,7 +305,9 @@ Return ONLY a valid JSON object. Nothing else.
                 abusive_language_detected: false,
                 abusive_language_details: null,
                 class_tone: "Could not analyse",
-                key_interactions_summary: "Analysis failed."
+                key_interactions_summary: "Analysis failed.",
+                content_quality: null,
+                tone_analysis: null,
             }
         };
     }
@@ -228,27 +320,33 @@ export async function analyzeTranscriptText(
     transcript: string
 ): Promise<AudioInsights> {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
-        generationConfig: {
-            temperature: 0,
-            responseMimeType: "application/json",
-            maxOutputTokens: 2048,
-        },
-    });
 
-    const result = await model.generateContent([
-        {
-            text: `You are a Classroom Transcript Auditor. Analyse the following lecture transcript and return ONLY a valid JSON object — no markdown, no extra text.
+    const ANALYSIS_PROMPT = `You are a Classroom Transcript Auditor. Analyse the following lecture transcript and return ONLY a valid JSON object — no markdown, no extra text.
 
 The transcript may already have [Teacher] and [Student] labels. If it does not, infer who is teaching vs who is asking questions based on context.
 
-Analyse the following:
+Produce ALL of the following fields:
+
+Basic metrics:
 - student_interaction_percentage: Estimate the % of total speaking turns/lines taken by students (0–100).
 - abusive_language_detected: true if the teacher used abusive, discriminatory, or inappropriate language. Otherwise false.
 - abusive_language_details: If flagged, brief factual description. Otherwise null.
 - class_tone: A short phrase describing the classroom atmosphere.
 - key_interactions_summary: 1–2 sentences summarising the main student interactions.
+
+Content Quality (analyse the lecture TEXT and score each parameter 0–10):
+- explanation_quality: Is the explanation clear, step-by-step, accessible? Does the teacher use examples/analogies?
+- title_relevance: How well does the lecture title (if present in text) match what was actually taught? If no title is discernible, score based on topic coherence.
+- content_correctness: Are facts, formulas, and definitions stated accurately? Flag any errors.
+- depth_and_coverage: Is the topic explored thoroughly? Are subtopics given appropriate time?
+- engagement_style: Does the teacher use questions, stories, real-world examples to engage students?
+For each: provide a score (0–10) and a one-sentence note. Compute overall_score as a weighted average (0–100).
+
+Tone & Language Analysis (beyond abusive flag):
+- harsh_language: Dismissive, belittling, or condescending phrases toward students.
+- emotional_statements: Expressions of frustration, favoritism, or over-emotional reactions.
+- negative_statements: Demotivating comments that discourage learning.
+For each: detected (boolean), severity ("low"|"medium"|"high"|null if not detected), examples (array of up to 2 direct quoted excerpts — empty array if none).
 
 Return exactly this JSON shape:
 {
@@ -256,25 +354,47 @@ Return exactly this JSON shape:
   "abusive_language_detected": false,
   "abusive_language_details": null,
   "class_tone": "Formal and one-directional",
-  "key_interactions_summary": "No significant student interactions were detected."
+  "key_interactions_summary": "No significant student interactions were detected.",
+  "content_quality": {
+    "overall_score": 74,
+    "explanation_quality": { "score": 8, "note": "Clear step-by-step with good examples." },
+    "title_relevance": { "score": 9, "note": "Content closely matched the stated title." },
+    "content_correctness": { "score": 7, "note": "Minor inaccuracy noted in one formula." },
+    "depth_and_coverage": { "score": 6, "note": "Some subtopics were rushed." },
+    "engagement_style": { "score": 5, "note": "Few questions posed to students." }
+  },
+  "tone_analysis": {
+    "harsh_language": { "detected": false, "severity": null, "examples": [] },
+    "emotional_statements": { "detected": false, "severity": null, "examples": [] },
+    "negative_statements": { "detected": false, "severity": null, "examples": [] }
+  }
 }
 
 TRANSCRIPT:
-${transcript}`,
-        },
-    ]);
+${transcript}`;
 
-    const raw = result.response.text().trim();
+    const raw = await callWithModelFallback("analyzeTranscriptText", async (modelName) => {
+        const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: { temperature: 0, responseMimeType: "application/json", maxOutputTokens: 8192 },
+        });
+        const result = await model.generateContent([{ text: ANALYSIS_PROMPT }]);
+        return result.response.text().trim();
+    });
+
     try {
         const cleaned = raw.replace(/```json\n?|\n?```/g, "").trim();
         return JSON.parse(cleaned) as AudioInsights;
     } catch {
+        console.error("[analyzeTranscriptText] JSON parse failed. Raw Gemini output:", raw);
         return {
             student_interaction_percentage: 0,
             abusive_language_detected: false,
             abusive_language_details: null,
             class_tone: "Could not analyse",
             key_interactions_summary: "Analysis failed.",
+            content_quality: null,
+            tone_analysis: null,
         };
     }
 }
@@ -296,13 +416,6 @@ export async function compareNotesWithLecture(
     lectureContent: string
 ): Promise<MatchResult> {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
-        generationConfig: {
-            temperature: 0, // 0 ensures deterministic scoring
-            responseMimeType: "application/json"
-        }
-    });
 
     const prompt = `You are a strict educational AI assistant and forensic text analyzer. You have two distinct tasks:
 
@@ -339,23 +452,14 @@ Return a JSON object with the following fields depending on the analysis of BOTH
 
 Return ONLY valid JSON, nothing else.`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-
-    // Parse JSON from response (strip markdown code fences if present)
-    const cleaned = responseText.replace(/```json\n?|\n?```/g, "").trim();
-
-    try {
+    return callWithModelFallback("compareNotes", async (modelName) => {
+        const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: { temperature: 0, responseMimeType: "application/json" },
+        });
+        const result = await model.generateContent(prompt);
+        const cleaned = result.response.text().replace(/```json\n?|\n?```/g, "").trim();
         return JSON.parse(cleaned) as MatchResult;
-    } catch {
-        return {
-            score: 0,
-            feedback: "Could not analyze notes. Please try again.",
-            covered: [],
-            missing: [],
-            aiProbability: 0,
-            humanProbability: 0,
-            explanation: "Analysis failed",
-        };
-    }
+    });
 }
+
