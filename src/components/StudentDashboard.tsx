@@ -70,8 +70,8 @@ export function StudentDashboard() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const galleryInputRef = useRef<HTMLInputElement>(null);
 
-    // Selected feedback
-    const [selectedFeedback, setSelectedFeedback] = useState<AIFeedback | null>(null);
+    // Selected feedback — tracks which upload row is expanded
+    const [expandedUploadId, setExpandedUploadId] = useState<string | null>(null);
 
     const fetchLectures = async (subject: string) => {
         setLoading(true);
@@ -371,82 +371,82 @@ export function StudentDashboard() {
                                 <h3 className="text-sm font-medium text-neutral-400">Previous Submissions</h3>
                                 {myUploads.map((upload) => {
                                     const fb = parseFeedback(upload);
+                                    const isExpanded = expandedUploadId === upload.id;
                                     return (
-                                        <button
-                                            key={upload.id}
-                                            className="w-full text-left p-3 rounded-xl bg-neutral-900 border border-neutral-800 hover:border-neutral-700 transition-colors"
-                                            onClick={() => setSelectedFeedback(fb)}
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-sm text-neutral-300">
-                                                    {new Date(upload.created_at).toLocaleDateString()}
-                                                </span>
-                                                {upload.ocr_status === "completed" && upload.match_score != null ? (
-                                                    <span className={`text-sm font-semibold px-2 py-1 rounded-lg ${upload.match_score >= 80 ? "bg-green-500/10 text-green-400" :
-                                                        upload.match_score >= 50 ? "bg-yellow-500/10 text-yellow-400" :
-                                                            "bg-red-500/10 text-red-400"
-                                                        }`}>
-                                                        {upload.match_score}%
+                                        <div key={upload.id} className="space-y-0">
+                                            <button
+                                                className={`w-full text-left p-3 rounded-xl bg-neutral-900 border transition-colors ${isExpanded
+                                                        ? "border-purple-500/50 rounded-b-none"
+                                                        : "border-neutral-800 hover:border-neutral-700"
+                                                    }`}
+                                                onClick={() => setExpandedUploadId(isExpanded ? null : upload.id)}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm text-neutral-300">
+                                                        {new Date(upload.created_at).toLocaleDateString()}
                                                     </span>
-                                                ) : upload.ocr_status === "processing" ? (
-                                                    <span className="text-xs text-neutral-500 flex items-center gap-1">
-                                                        <Loader2 className="w-3 h-3 animate-spin" /> Processing
-                                                    </span>
-                                                ) : upload.ocr_status === "failed" ? (
-                                                    <span className="text-xs text-red-400 flex items-center gap-1">
-                                                        <AlertCircle className="w-3 h-3" /> Failed
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-xs text-neutral-500">Pending</span>
-                                                )}
-                                            </div>
-                                        </button>
+                                                    {upload.ocr_status === "completed" && upload.match_score != null ? (
+                                                        <span className={`text-sm font-semibold px-2 py-1 rounded-lg ${upload.match_score >= 80 ? "bg-green-500/10 text-green-400" :
+                                                            upload.match_score >= 50 ? "bg-yellow-500/10 text-yellow-400" :
+                                                                "bg-red-500/10 text-red-400"
+                                                            }`}>
+                                                            {upload.match_score}%
+                                                        </span>
+                                                    ) : upload.ocr_status === "processing" ? (
+                                                        <span className="text-xs text-neutral-500 flex items-center gap-1">
+                                                            <Loader2 className="w-3 h-3 animate-spin" /> Processing
+                                                        </span>
+                                                    ) : upload.ocr_status === "failed" ? (
+                                                        <span className="text-xs text-red-400 flex items-center gap-1">
+                                                            <AlertCircle className="w-3 h-3" /> Failed
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-neutral-500">Pending</span>
+                                                    )}
+                                                </div>
+                                            </button>
+
+                                            {/* Inline AI Feedback Panel — expands directly below the row */}
+                                            {isExpanded && fb && (
+                                                <div className="p-4 rounded-b-xl bg-neutral-900 border border-t-0 border-purple-500/50 space-y-3">
+                                                    <h3 className="font-semibold text-white text-sm">AI Feedback</h3>
+                                                    {/* Score bar */}
+                                                    <div className="space-y-1">
+                                                        <div className="flex justify-between text-sm">
+                                                            <span className="text-neutral-400">Match Score</span>
+                                                            <span className="font-semibold text-white">{fb.score}%</span>
+                                                        </div>
+                                                        <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
+                                                            <div
+                                                                className={`h-full rounded-full transition-all ${fb.score >= 80 ? "bg-green-500" :
+                                                                    fb.score >= 50 ? "bg-yellow-500" : "bg-red-500"
+                                                                    }`}
+                                                                style={{ width: `${fb.score}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-sm text-neutral-300">{fb.feedback}</p>
+                                                    {fb.covered.length > 0 && (
+                                                        <div>
+                                                            <p className="text-xs font-medium text-green-400 mb-1">✅ Covered</p>
+                                                            <ul className="text-sm text-neutral-400 space-y-1">
+                                                                {fb.covered.map((c, i) => <li key={i}>• {c}</li>)}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                    {fb.missing.length > 0 && (
+                                                        <div>
+                                                            <p className="text-xs font-medium text-red-400 mb-1">❌ Missing</p>
+                                                            <ul className="text-sm text-neutral-400 space-y-1">
+                                                                {fb.missing.map((m, i) => <li key={i}>• {m}</li>)}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     );
                                 })}
-                            </div>
-                        )}
-
-                        {/* AI Feedback Panel */}
-                        {selectedFeedback && (
-                            <div className="p-4 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <h3 className="font-semibold text-white">AI Feedback</h3>
-                                    <button onClick={() => setSelectedFeedback(null)} className="text-neutral-500 hover:text-white">
-                                        <X className="w-4 h-4" />
-                                    </button>
-                                </div>
-                                {/* Score bar */}
-                                <div className="space-y-1">
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-neutral-400">Match Score</span>
-                                        <span className="font-semibold text-white">{selectedFeedback.score}%</span>
-                                    </div>
-                                    <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full rounded-full transition-all ${selectedFeedback.score >= 80 ? "bg-green-500" :
-                                                selectedFeedback.score >= 50 ? "bg-yellow-500" : "bg-red-500"
-                                                }`}
-                                            style={{ width: `${selectedFeedback.score}%` }}
-                                        />
-                                    </div>
-                                </div>
-                                <p className="text-sm text-neutral-300">{selectedFeedback.feedback}</p>
-                                {selectedFeedback.covered.length > 0 && (
-                                    <div>
-                                        <p className="text-xs font-medium text-green-400 mb-1">✅ Covered</p>
-                                        <ul className="text-sm text-neutral-400 space-y-1">
-                                            {selectedFeedback.covered.map((c, i) => <li key={i}>• {c}</li>)}
-                                        </ul>
-                                    </div>
-                                )}
-                                {selectedFeedback.missing.length > 0 && (
-                                    <div>
-                                        <p className="text-xs font-medium text-red-400 mb-1">❌ Missing</p>
-                                        <ul className="text-sm text-neutral-400 space-y-1">
-                                            {selectedFeedback.missing.map((m, i) => <li key={i}>• {m}</li>)}
-                                        </ul>
-                                    </div>
-                                )}
                             </div>
                         )}
 

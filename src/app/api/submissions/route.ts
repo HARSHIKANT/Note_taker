@@ -30,11 +30,12 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Lecture not found" }, { status: 404 });
     }
 
-    // Get submissions with student info
+    // Get submissions with student info — exclude failed uploads/OCR (only shown to students)
     const { data, error } = await supabase
         .from("uploads")
         .select("id, student_email, file_id, ocr_text, match_score, ai_feedback, ocr_status, ai_probability, human_probability, ai_explanation, created_at, student_id")
         .eq("lecture_id", lectureId)
+        .neq("ocr_status", "failed")
         .order("created_at", { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
