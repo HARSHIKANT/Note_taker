@@ -9,6 +9,7 @@ export type SubjectValue = (typeof SUBJECTS)[number];
 
 export interface ExtendedSession extends Session {
     accessToken?: string;
+    error?: string;
     userId?: string;
     role?: "student" | "teacher" | null;
     class?: ClassValue | null;
@@ -17,6 +18,9 @@ export interface ExtendedSession extends Session {
 
 export interface ExtendedToken extends JWT {
     accessToken?: string;
+    refreshToken?: string;
+    accessTokenExpires?: number;
+    error?: string;
     userId?: string;
     role?: "student" | "teacher" | null;
     class?: ClassValue | null;
