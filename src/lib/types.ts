@@ -14,6 +14,7 @@ export interface ExtendedSession extends Session {
     role?: "student" | "teacher" | null;
     class?: ClassValue | null;
     isHeadTeacher?: boolean;
+    geminiApiKey?: string | null;
 }
 
 export interface ExtendedToken extends JWT {
@@ -25,4 +26,5 @@ export interface ExtendedToken extends JWT {
     role?: "student" | "teacher" | null;
     class?: ClassValue | null;
     isHeadTeacher?: boolean;
+    geminiApiKey?: string | null;
 }

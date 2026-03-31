@@ -24,8 +24,8 @@ export function SubmissionsView({
     return (
         <>
             <div>
-                <h2 className="text-2xl font-bold text-white">{lecture.title}</h2>
-                <p className="text-sm text-neutral-500">Class {lecture.class} • Student Submissions</p>
+                <h2 className="text-2xl lg:text-3xl font-bold text-white">{lecture.title}</h2>
+                <p className="text-sm lg:text-base text-neutral-400 mt-1">Class {lecture.class} • Student Submissions</p>
             </div>
 
             {loadingSubs ? (
@@ -35,8 +35,8 @@ export function SubmissionsView({
             ) : submissions.length === 0 ? (
                 <div className="text-center py-16 space-y-3">
                     <Users className="w-12 h-12 text-neutral-600 mx-auto" />
-                    <p className="text-neutral-400">No submissions yet</p>
-                    <p className="text-sm text-neutral-600">
+                    <p className="text-neutral-300 text-lg">No submissions yet</p>
+                    <p className="text-sm text-neutral-500">
                         {lecture.published
                             ? "Students haven't uploaded notes yet."
                             : "Publish this lecture to allow student submissions."}
@@ -48,14 +48,14 @@ export function SubmissionsView({
                     <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 p-1 rounded-xl w-fit">
                         <button
                             onClick={() => setActiveTab("notes")}
-                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "notes" ? "bg-blue-600 text-white" : "text-neutral-400 hover:text-white"
+                            className={`px-4 lg:px-6 py-2 rounded-lg text-sm lg:text-base font-semibold transition-colors ${activeTab === "notes" ? "bg-blue-600 text-white" : "text-neutral-400 hover:text-white"
                                 }`}
                         >
                             Analysis
                         </button>
                         <button
                             onClick={() => setActiveTab("ai")}
-                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "ai" ? "bg-purple-600 text-white" : "text-neutral-400 hover:text-white"
+                            className={`px-4 lg:px-6 py-2 rounded-lg text-sm lg:text-base font-semibold transition-colors ${activeTab === "ai" ? "bg-purple-600 text-white" : "text-neutral-400 hover:text-white"
                                 }`}
                         >
                             AI Detection
@@ -64,34 +64,34 @@ export function SubmissionsView({
 
                     {/* Notes Analysis Insights Panel */}
                     {activeTab === "notes" && insights && (
-                        <div className="p-5 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-5">
+                        <div className="p-5 lg:p-7 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-5">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-blue-500/10 text-blue-400 rounded-xl">
+                                <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-xl">
                                     <TrendingUp className="w-6 h-6" />
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold text-white">Class Insights</h3>
-                                    <p className="text-xs text-neutral-400">AI-generated summary of class performance</p>
+                                    <h3 className="font-semibold text-white text-base lg:text-lg">Class Insights</h3>
+                                    <p className="text-xs lg:text-sm text-neutral-400">AI-generated summary of class performance</p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                 {/* Left: Score Distribution */}
-                                <div className="p-4 rounded-xl bg-neutral-950/50 border border-neutral-800">
-                                    <div className="flex justify-between items-end mb-4">
-                                        <span className="text-sm text-neutral-400">Average Score</span>
-                                        <span className={`text-2xl font-bold ${insights.averageScore >= 80 ? 'text-green-400' :
+                                <div className="p-5 rounded-xl bg-neutral-950/50 border border-neutral-800">
+                                    <div className="flex justify-between items-end mb-5">
+                                        <span className="text-sm lg:text-base text-neutral-300 font-medium">Average Score</span>
+                                        <span className={`text-3xl lg:text-4xl font-bold ${insights.averageScore >= 80 ? 'text-green-400' :
                                             insights.averageScore >= 50 ? 'text-yellow-400' : 'text-red-400'
                                             }`}>{insights.averageScore}%</span>
                                     </div>
-                                    <div className="h-32 w-full text-xs">
+                                    <div className="h-40 lg:h-52 w-full">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={insights.scoreDistribution} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
-                                                <XAxis dataKey="range" stroke="#525252" fontSize={10} tickLine={false} axisLine={false} />
-                                                <YAxis stroke="#525252" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
+                                            <BarChart data={insights.scoreDistribution} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                                                <XAxis dataKey="range" stroke="#525252" fontSize={11} tickLine={false} axisLine={false} />
+                                                <YAxis stroke="#525252" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
                                                 <Tooltip
                                                     cursor={{ fill: '#262626' }}
-                                                    contentStyle={{ backgroundColor: '#171717', border: '1px solid #262626', borderRadius: '8px', color: '#fff' }}
+                                                    contentStyle={{ backgroundColor: '#171717', border: '1px solid #262626', borderRadius: '8px', color: '#fff', fontSize: '13px' }}
                                                 />
                                                 <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                                             </BarChart>
@@ -100,19 +100,19 @@ export function SubmissionsView({
                                 </div>
 
                                 {/* Right: Most Missed Concepts */}
-                                <div className="p-4 rounded-xl bg-neutral-950/50 border border-neutral-800 space-y-3">
+                                <div className="p-5 rounded-xl bg-neutral-950/50 border border-neutral-800 space-y-3">
                                     <div className="flex items-center gap-2">
                                         <AlertCircle className="w-4 h-4 text-orange-400" />
-                                        <span className="text-sm font-semibold text-white">Most Missed Concepts</span>
+                                        <span className="text-sm lg:text-base font-semibold text-white">Most Missed Concepts</span>
                                     </div>
-                                    <p className="text-xs text-neutral-300 leading-relaxed">
+                                    <p className="text-sm text-neutral-300 leading-relaxed">
                                         {insights.missedConceptsSummary}
                                     </p>
                                     {insights.missingTopicsList?.length > 0 && (
-                                        <ul className="text-xs text-neutral-400 space-y-1 mt-2">
+                                        <ul className="text-sm text-neutral-400 space-y-1.5 mt-2">
                                             {insights.missingTopicsList.map((topic: string, i: number) => (
                                                 <li key={i} className="flex gap-2">
-                                                    <span className="text-orange-500/50">•</span>
+                                                    <span className="text-orange-400/70">•</span>
                                                     {topic}
                                                 </li>
                                             ))}
@@ -125,33 +125,33 @@ export function SubmissionsView({
 
                     {/* AI Detection Insights Panel */}
                     {activeTab === "ai" && aiDetectionInsights && (
-                        <div className="p-5 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-5">
+                        <div className="p-5 lg:p-7 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-5">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-purple-500/10 text-purple-400 rounded-xl">
+                                <div className="p-2.5 bg-purple-500/10 text-purple-400 rounded-xl">
                                     <Cpu className="w-6 h-6" />
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold text-white">AI Detection Insights</h3>
-                                    <p className="text-xs text-neutral-400">Class-wide AI probability metrics</p>
+                                    <h3 className="font-semibold text-white text-base lg:text-lg">AI Detection Insights</h3>
+                                    <p className="text-xs lg:text-sm text-neutral-400">Class-wide AI probability metrics</p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {/* Left: Score Distribution */}
-                                <div className="p-4 rounded-xl bg-neutral-950/50 border border-neutral-800">
-                                    <div className="flex justify-between items-end mb-4">
-                                        <span className="text-sm text-neutral-400">Class Average AI</span>
-                                        <span className={`text-2xl font-bold ${aiDetectionInsights.averageAiProbability >= 50 ? 'text-red-400' : 'text-green-400'
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                {/* Left: Distribution chart */}
+                                <div className="p-5 rounded-xl bg-neutral-950/50 border border-neutral-800">
+                                    <div className="flex justify-between items-end mb-5">
+                                        <span className="text-sm lg:text-base text-neutral-300 font-medium">Class Average AI</span>
+                                        <span className={`text-3xl lg:text-4xl font-bold ${aiDetectionInsights.averageAiProbability >= 50 ? 'text-red-400' : 'text-green-400'
                                             }`}>{aiDetectionInsights.averageAiProbability.toFixed(1)}%</span>
                                     </div>
-                                    <div className="h-32 w-full text-xs">
+                                    <div className="h-40 lg:h-52 w-full">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={aiDetectionInsights.distribution} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
-                                                <XAxis dataKey="range" stroke="#525252" fontSize={10} tickLine={false} axisLine={false} />
-                                                <YAxis stroke="#525252" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
+                                            <BarChart data={aiDetectionInsights.distribution} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                                                <XAxis dataKey="range" stroke="#525252" fontSize={11} tickLine={false} axisLine={false} />
+                                                <YAxis stroke="#525252" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
                                                 <Tooltip
                                                     cursor={{ fill: '#262626' }}
-                                                    contentStyle={{ backgroundColor: '#171717', border: '1px solid #262626', borderRadius: '8px', color: '#fff' }}
+                                                    contentStyle={{ backgroundColor: '#171717', border: '1px solid #262626', borderRadius: '8px', color: '#fff', fontSize: '13px' }}
                                                 />
                                                 <Bar dataKey="count" fill="#a855f7" radius={[4, 4, 0, 0]} />
                                             </BarChart>
@@ -160,12 +160,12 @@ export function SubmissionsView({
                                 </div>
 
                                 {/* Right: Summary/Warning */}
-                                <div className="p-4 rounded-xl bg-neutral-950/50 border border-neutral-800 space-y-3 flex flex-col justify-center">
+                                <div className="p-5 rounded-xl bg-neutral-950/50 border border-neutral-800 space-y-3 flex flex-col justify-center">
                                     <div className="flex items-center gap-2">
                                         <AlertCircle className={`w-4 h-4 ${aiDetectionInsights.averageAiProbability >= 50 ? 'text-red-400' : 'text-green-400'}`} />
-                                        <span className="text-sm font-semibold text-white">Overall Status</span>
+                                        <span className="text-sm lg:text-base font-semibold text-white">Overall Status</span>
                                     </div>
-                                    <p className="text-xs text-neutral-300 leading-relaxed">
+                                    <p className="text-sm text-neutral-300 leading-relaxed">
                                         {aiDetectionInsights.averageAiProbability >= 50
                                             ? "The class average suggests a high likelihood of AI-generated content. You may want to review individual submissions closely for generic phrasing and unnatural coherence."
                                             : "The class average suggests submissions are mostly human-written, showing expected variations in language and personal structure."
@@ -178,13 +178,13 @@ export function SubmissionsView({
 
                     <div>
                         <div className="flex items-center justify-between mb-4 px-1">
-                            <h3 className="text-sm font-semibold text-neutral-400">Individual Submissions</h3>
+                            <h3 className="text-sm lg:text-base font-semibold text-neutral-300">Individual Submissions</h3>
                         </div>
 
                         {/* Break-out wrapper */}
                         <div className="w-[100vw] relative left-1/2 -translate-x-1/2">
                             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                     {submissions.map((sub) => {
                                         let feedback: any = null;
                                         try { feedback = sub.ai_feedback ? JSON.parse(sub.ai_feedback) : null; } catch { }
@@ -193,9 +193,9 @@ export function SubmissionsView({
                                             <div
                                                 key={sub.id}
                                                 onClick={() => setExpandedId(expandedId === sub.id ? null : sub.id)}
-                                                className={`min-h-48 p-4 sm:p-6 rounded-2xl bg-neutral-900 border transition-all duration-300 cursor-pointer overflow-hidden flex flex-col gap-3
+                                                className={`min-h-48 p-4 sm:p-5 lg:p-6 rounded-2xl bg-neutral-900 border transition-all duration-300 cursor-pointer overflow-hidden flex flex-col gap-3
                                                     ${expandedId === sub.id
-                                                        ? "border-blue-500/50 shadow-lg shadow-blue-500/10 col-span-full md:col-span-2 lg:col-span-full row-span-2"
+                                                        ? "border-blue-500/50 shadow-lg shadow-blue-500/10 col-span-full row-span-2"
                                                         : "border-neutral-800 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/50"
                                                     }`}
                                             >
@@ -206,10 +206,10 @@ export function SubmissionsView({
                                                         </div>
                                                         <div className="mr-3 sm:mx-3 flex-1 min-w-0">
                                                             <p className="text-sm font-semibold text-white truncate" title={sub.student_name}>{sub.student_name}</p>
-                                                            <p className="text-[11px] text-neutral-500 mt-0.5 truncate">
-                                                                {new Date(sub.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                            <p className="text-xs text-neutral-500 mt-0.5 truncate">
+                                                                {new Date(sub.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Kolkata' })}
                                                                 {' • '}
-                                                                {new Date(sub.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                {new Date(sub.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST
                                                             </p>
                                                         </div>
                                                     </div>
@@ -217,17 +217,19 @@ export function SubmissionsView({
                                                     <div className="shrink-0 flex items-center justify-end">
                                                         {sub.ocr_status === "completed" && sub.match_score != null ? (
                                                             activeTab === "notes" ? (
-                                                                <span className={`text-sm font-bold px-2.5 py-1 rounded-lg ${sub.match_score >= 80 ? "bg-green-500/10 text-green-400" :
-                                                                    sub.match_score >= 50 ? "bg-yellow-500/10 text-yellow-400" :
-                                                                        "bg-red-500/10 text-red-400"
-                                                                    }`}>
-                                                                    {sub.match_score}%
+                                                                <span className="flex flex-col items-end gap-0.5">
+                                                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Notes Coverage</span>
+                                                                    <span className={`text-sm font-bold px-2.5 py-0.5 rounded-lg ${sub.match_score >= 80 ? "bg-green-500/10 text-green-400" :
+                                                                        sub.match_score >= 50 ? "bg-yellow-500/10 text-yellow-400" :
+                                                                            "bg-red-500/10 text-red-400"
+                                                                        }`}>{sub.match_score}%</span>
                                                                 </span>
                                                             ) : (
-                                                                <span className={`text-sm font-bold px-2.5 py-1 rounded-lg ${sub.ai_probability && sub.ai_probability > 50 ? "bg-red-500/10 text-red-400" :
-                                                                    "bg-green-500/10 text-green-400"
-                                                                    }`}>
-                                                                    {sub.ai_probability || 0}% AI
+                                                                <span className="flex flex-col items-end gap-0.5">
+                                                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">AI Written</span>
+                                                                    <span className={`text-sm font-bold px-2.5 py-0.5 rounded-lg ${sub.ai_probability && sub.ai_probability > 50 ? "bg-red-500/10 text-red-400" :
+                                                                        "bg-green-500/10 text-green-400"
+                                                                        }`}>{sub.ai_probability || 0}%</span>
                                                                 </span>
                                                             )
                                                         ) : sub.ocr_status === "processing" ? (

@@ -75,28 +75,28 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
 
     return (
         <>
-            <h2 className="text-2xl font-bold text-white">New Lecture</h2>
-            <div className="space-y-5">
+            <h2 className="text-2xl lg:text-3xl font-bold text-white">New Lecture</h2>
+            <div className="space-y-6">
                 {/* Title */}
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-neutral-400">Title</label>
+                    <label className="text-sm lg:text-base font-medium text-neutral-300">Title</label>
                     <input
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         placeholder="e.g. Newton's Laws of Motion"
-                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 lg:py-3.5 text-white lg:text-base placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-600"
                     />
                 </div>
 
                 {/* Target Class */}
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-neutral-400">Target Class</label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <label className="text-sm lg:text-base font-medium text-neutral-300">Target Class</label>
+                    <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
                         {CLASSES.map((cls) => (
                             <button
                                 key={cls}
                                 onClick={() => setTargetClass(cls)}
-                                className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${targetClass === cls
+                                className={`py-2.5 lg:py-3 rounded-xl text-sm lg:text-base font-semibold transition-all ${targetClass === cls
                                     ? "bg-blue-600 text-white shadow-lg"
                                     : "bg-neutral-900 border border-neutral-800 text-neutral-300 hover:bg-neutral-800"
                                     }`}
@@ -109,8 +109,8 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
 
                 {/* Recording Upload */}
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-neutral-400">
-                        Upload Recording <span className="text-neutral-600">(optional)</span>
+                    <label className="text-sm lg:text-base font-medium text-neutral-300">
+                        Upload Recording <span className="text-neutral-500">(optional)</span>
                     </label>
                     <input
                         type="file"
@@ -136,7 +136,7 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
 
                 {/* Transcript */}
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-neutral-400 flex items-center gap-1.5">
+                    <label className="text-sm lg:text-base font-medium text-neutral-300 flex items-center gap-1.5">
                         Transcript
                         {!isAudioTranscript && transcript && (
                             <span className="flex items-center gap-1 text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">
@@ -144,7 +144,7 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
                             </span>
                         )}
                     </label>
-                    
+
                     {isAudioTranscript ? (
                         <div className="w-full bg-amber-950/20 border border-amber-900/40 rounded-xl px-5 py-6 flex flex-col items-center justify-center gap-3 text-center">
                             <div className="w-12 h-12 bg-amber-500/10 rounded-full flex items-center justify-center">
@@ -178,14 +178,14 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
                     <button
                         onClick={() => handleSave(false)}
                         disabled={saving || !title || !targetClass || !transcript}
-                        className="flex-1 py-3 rounded-xl bg-neutral-800 text-white font-medium hover:bg-neutral-700 disabled:opacity-40 transition-colors"
+                        className="flex-1 py-3 lg:py-3.5 rounded-xl bg-neutral-800 text-white lg:text-base font-medium hover:bg-neutral-700 disabled:opacity-40 transition-colors"
                     >
                         Save as Draft
                     </button>
                     <button
                         onClick={() => handleSave(true)}
                         disabled={saving || !title || !targetClass || !transcript}
-                        className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-500 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+                        className="flex-1 py-3 lg:py-3.5 rounded-xl bg-blue-600 text-white lg:text-base font-medium hover:bg-blue-500 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
                     >
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
                         Publish

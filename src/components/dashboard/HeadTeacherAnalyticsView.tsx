@@ -140,16 +140,22 @@ export function HeadTeacherAnalyticsView({ myId }: { myId: string }) {
                                 <BarChart2 className="w-4 h-4 text-amber-400" />
                                 <span className="text-sm font-semibold text-amber-200">You (Head Teacher)</span>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-3">
                                 {myAvgContent !== null && (
-                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${myAvgContent >= 70 ? "bg-green-500/10 text-green-400" : myAvgContent >= 50 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400"}`}>
-                                        {myAvgContent}/100
-                                    </span>
+                                    <div className="flex flex-col items-end gap-0.5">
+                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Content Quality</span>
+                                        <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${myAvgContent >= 70 ? "bg-green-500/10 text-green-400" : myAvgContent >= 50 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400"}`}>
+                                            {myAvgContent}/100
+                                        </span>
+                                    </div>
                                 )}
                                 {myFlagCount > 0 && (
                                     <span className="text-xs text-red-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{myFlagCount}</span>
                                 )}
-                                <span className="text-lg font-bold text-blue-400">{myAvgInteraction}%</span>
+                                <div className="flex flex-col items-end gap-0.5">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Student Interaction</span>
+                                    <span className="text-sm font-bold text-blue-400">{myAvgInteraction}%</span>
+                                </div>
                             </div>
                         </div>
                         <InteractionBar value={myAvgInteraction} color="bg-amber-500" />
@@ -163,16 +169,22 @@ export function HeadTeacherAnalyticsView({ myId }: { myId: string }) {
                                     <p className="text-sm font-semibold text-white">{t.name}</p>
                                     <p className="text-xs text-neutral-500">{t.email}</p>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-3">
                                     {t.avgContent !== null && (
-                                        <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${t.avgContent >= 70 ? "bg-green-500/10 text-green-400" : t.avgContent >= 50 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400"}`}>
-                                            {t.avgContent}/100
-                                        </span>
+                                        <div className="flex flex-col items-end gap-0.5">
+                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Content Quality</span>
+                                            <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${t.avgContent >= 70 ? "bg-green-500/10 text-green-400" : t.avgContent >= 50 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400"}`}>
+                                                {t.avgContent}/100
+                                            </span>
+                                        </div>
                                     )}
                                     {t.flagCount > 0 && (
                                         <span className="text-xs text-red-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{t.flagCount}</span>
                                     )}
-                                    <span className="text-lg font-bold text-blue-400">{t.avgInteraction}%</span>
+                                    <div className="flex flex-col items-end gap-0.5">
+                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Student Interaction</span>
+                                        <span className="text-sm font-bold text-blue-400">{t.avgInteraction}%</span>
+                                    </div>
                                 </div>
                             </div>
                             <InteractionBar value={t.avgInteraction} color="bg-blue-500" />
@@ -308,8 +320,11 @@ function LectureCard({ lecture }: { lecture: LectureWithInsights }) {
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
                         {cq && (
-                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg ${cq.overall_score >= 70 ? "bg-green-500/10 text-green-400" : cq.overall_score >= 50 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400"}`}>
-                                {cq.overall_score}/100
+                            <span className={`flex flex-col items-end gap-0.5`}>
+                                <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-500">Content Quality</span>
+                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg ${cq.overall_score >= 70 ? "bg-green-500/10 text-green-400" : cq.overall_score >= 50 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400"}`}>
+                                    {cq.overall_score}/100
+                                </span>
                             </span>
                         )}
                         {toneWarning && (
@@ -329,7 +344,9 @@ function LectureCard({ lecture }: { lecture: LectureWithInsights }) {
                 <div className="grid grid-cols-2 gap-2">
                     <div className="bg-neutral-800 rounded-lg p-2.5 space-y-1">
                         <p className="text-[11px] text-neutral-400 flex items-center gap-1"><Users className="w-3 h-3" /> Student Interaction</p>
-                        <p className="text-lg font-bold text-blue-400">{ins.student_interaction_percentage}%</p>
+                        <p className="text-lg font-bold text-blue-400">{ins.student_interaction_percentage}%
+                            <span className="text-[10px] font-normal text-neutral-500 ml-1">of class time</span>
+                        </p>
                         <InteractionBar value={ins.student_interaction_percentage} color="bg-blue-500" />
                     </div>
                     <div className="bg-neutral-800 rounded-lg p-2.5 space-y-1">

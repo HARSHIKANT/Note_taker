@@ -18,6 +18,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (!session.geminiApiKey) {
+        return NextResponse.json(
+            { error: "Gemini API key is required. Please add your key in Settings." },
+            { status: 403 }
+        );
+    }
+
+    const geminiApiKey = session.geminiApiKey;
+
     const { transcript, lectureId } = await req.json();
 
     if (!transcript || transcript.trim().length < 50) {
@@ -28,7 +37,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-        const insights = await analyzeTranscriptText(transcript);
+        const insights = await analyzeTranscriptText(transcript, geminiApiKey);
 
         // If lectureId given, persist insights back to the lecture record
         if (lectureId) {

@@ -17,6 +17,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (!session.geminiApiKey) {
+    return NextResponse.json(
+      { error: "Gemini API key is required. Please add your key in Settings." },
+      { status: 403 }
+    );
+  }
+
+  const geminiApiKey = session.geminiApiKey;
+
   const body = await req.json();
   const { filePath, mimeType, lectureId } = body;
 
@@ -25,7 +34,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await transcribeRecordingFromSupabase(filePath, mimeType);
+    const result = await transcribeRecordingFromSupabase(filePath, mimeType, geminiApiKey);
 
     // Clean up Supabase recording after transcription
     await adminSupabase.storage.from("recordings").remove([filePath]);

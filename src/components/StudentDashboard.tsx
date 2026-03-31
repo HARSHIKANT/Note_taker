@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { SUBJECTS } from "@/lib/types";
+import ApiKeyModal from "./ApiKeyModal";
+import type { ExtendedSession } from "@/lib/types";
 
 const SUBJECT_ICONS: Record<string, any> = {
     Physics: Atom,
@@ -46,8 +48,9 @@ interface AIFeedback {
 type View = "subjects" | "lectures" | "upload";
 
 export function StudentDashboard() {
-    const { data: session } = useSession();
-    const extSession = session as any;
+    const { data: session, update } = useSession();
+    const extSession = session as unknown as ExtendedSession;
+    const hasApiKey = !!extSession?.geminiApiKey;
 
     const [view, setView] = useState<View>("subjects");
     const [selectedSubject, setSelectedSubject] = useState<string>("");
@@ -260,9 +263,11 @@ export function StudentDashboard() {
 
     return (
         <div className="min-h-screen bg-neutral-950 text-neutral-200 font-sans">
+            {/* API Key Modal — shown until student provides their key */}
+            {!hasApiKey && <ApiKeyModal onSaved={() => update()} />}
             {/* Header */}
-            <div className="sticky top-0 z-30 bg-neutral-950/80 backdrop-blur-xl border-b border-neutral-800">
-                <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="sticky top-0 z-30 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-800">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 lg:py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         {view !== "subjects" && (
                             <button
@@ -276,39 +281,40 @@ export function StudentDashboard() {
                             </button>
                         )}
                         <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm">
-                                {session?.user?.name?.[0] || "S"}
+                            <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold text-base">
+                                {extSession?.user?.name?.[0] || "S"}
                             </div>
                             <div>
-                                <p className="font-semibold text-white text-sm">{session?.user?.name}</p>
-                                <p className="text-xs text-neutral-500">Class {extSession?.class} • Student</p>
+                                <p className="font-semibold text-white text-sm lg:text-base">{extSession?.user?.name}</p>
+                                <p className="text-xs lg:text-sm text-neutral-400">Class {extSession?.class} • Student</p>
                             </div>
                         </div>
                     </div>
-                    <button onClick={() => signOut()} className="p-2 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors">
+                    <button onClick={() => signOut()} className="flex items-center gap-2 px-3 py-2 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors text-sm">
                         <LogOut className="w-5 h-5" />
+                        <span className="hidden sm:inline">Sign out</span>
                     </button>
                 </div>
             </div>
 
-            <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10 space-y-6">
                 {/* SUBJECTS VIEW */}
                 {view === "subjects" && (
                     <>
-                        <h2 className="text-2xl font-bold text-white">My Subjects</h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <h2 className="text-2xl lg:text-3xl font-bold text-white">My Subjects</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                             {SUBJECTS.map((sub) => {
                                 const Icon = SUBJECT_ICONS[sub] || BookOpen;
                                 return (
                                     <button
                                         key={sub}
                                         onClick={() => openSubject(sub)}
-                                        className="group p-6 rounded-2xl bg-neutral-900 border border-neutral-800 hover:border-neutral-700 transition-all text-left hover:shadow-lg hover:shadow-purple-500/5"
+                                        className="group p-6 lg:p-8 rounded-2xl bg-neutral-900 border border-neutral-800 hover:border-neutral-700 transition-all text-left hover:shadow-lg hover:shadow-purple-500/5"
                                     >
-                                        <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
-                                            <Icon className="w-6 h-6 text-purple-400" />
+                                        <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-purple-500/10 flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
+                                            <Icon className="w-6 h-6 lg:w-7 lg:h-7 text-purple-400" />
                                         </div>
-                                        <h3 className="text-lg font-semibold text-white">{sub}</h3>
+                                        <h3 className="text-lg lg:text-xl font-semibold text-white">{sub}</h3>
                                     </button>
                                 );
                             })}
@@ -319,7 +325,7 @@ export function StudentDashboard() {
                 {/* LECTURES VIEW */}
                 {view === "lectures" && (
                     <>
-                        <h2 className="text-2xl font-bold text-white">{selectedSubject}</h2>
+                        <h2 className="text-2xl lg:text-3xl font-bold text-white">{selectedSubject}</h2>
                         {loading ? (
                             <div className="flex justify-center py-12">
                                 <Loader2 className="w-8 h-8 animate-spin text-neutral-500" />
@@ -327,25 +333,25 @@ export function StudentDashboard() {
                         ) : lectures.length === 0 ? (
                             <div className="text-center py-16 space-y-3">
                                 <BookOpen className="w-12 h-12 text-neutral-600 mx-auto" />
-                                <p className="text-neutral-400">No assignments available yet</p>
-                                <p className="text-sm text-neutral-600">Your teacher hasn&apos;t published any lectures for this subject.</p>
+                                <p className="text-neutral-300 text-lg">No assignments available yet</p>
+                                <p className="text-sm text-neutral-500">Your teacher hasn&apos;t published any lectures for this subject.</p>
                             </div>
                         ) : (
-                            <div className="space-y-3">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                 {lectures.map((lec) => (
                                     <div
                                         key={lec.id}
-                                        className="p-4 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-between"
+                                        className="p-5 lg:p-6 rounded-2xl bg-neutral-900 border border-neutral-800 hover:border-neutral-700 transition-colors flex items-center justify-between gap-4"
                                     >
-                                        <div>
-                                            <h3 className="font-semibold text-white">{lec.title}</h3>
-                                            <p className="text-xs text-neutral-500 mt-1">
-                                                {new Date(lec.created_at).toLocaleDateString()}
+                                        <div className="flex-1 min-w-0">
+                                            <h3 className="font-semibold text-white text-base lg:text-lg leading-snug">{lec.title}</h3>
+                                            <p className="text-sm text-neutral-400 mt-1">
+                                                {new Date(lec.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })} • {new Date(lec.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST
                                             </p>
                                         </div>
                                         <button
                                             onClick={() => openLectureUpload(lec)}
-                                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-medium transition-colors"
+                                            className="shrink-0 flex items-center gap-2 px-4 lg:px-5 py-2 lg:py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm lg:text-base font-medium transition-colors"
                                         >
                                             <Upload className="w-4 h-4" />
                                             Upload Notes
@@ -361,39 +367,40 @@ export function StudentDashboard() {
                 {view === "upload" && selectedLecture && (
                     <>
                         <div>
-                            <h2 className="text-2xl font-bold text-white">{selectedLecture.title}</h2>
-                            <p className="text-sm text-neutral-500">{selectedSubject} • Upload your notes</p>
+                            <h2 className="text-2xl lg:text-3xl font-bold text-white">{selectedLecture.title}</h2>
+                            <p className="text-sm lg:text-base text-neutral-400 mt-1">{selectedSubject} • Upload your notes</p>
                         </div>
 
                         {/* Previous Submissions */}
                         {myUploads.length > 0 && (
                             <div className="space-y-3">
-                                <h3 className="text-sm font-medium text-neutral-400">Previous Submissions</h3>
+                                <h3 className="text-sm lg:text-base font-medium text-neutral-300">Previous Submissions</h3>
                                 {myUploads.map((upload) => {
                                     const fb = parseFeedback(upload);
                                     const isExpanded = expandedUploadId === upload.id;
                                     return (
                                         <div key={upload.id} className="space-y-0">
                                             <button
-                                                className={`w-full text-left p-3 rounded-xl bg-neutral-900 border transition-colors ${isExpanded
-                                                        ? "border-purple-500/50 rounded-b-none"
-                                                        : "border-neutral-800 hover:border-neutral-700"
+                                                className={`w-full text-left p-3 lg:p-4 rounded-xl bg-neutral-900 border transition-colors ${isExpanded
+                                                    ? "border-purple-500/50 rounded-b-none"
+                                                    : "border-neutral-800 hover:border-neutral-700"
                                                     }`}
                                                 onClick={() => setExpandedUploadId(isExpanded ? null : upload.id)}
                                             >
                                                 <div className="flex items-center justify-between">
-                                                    <span className="text-sm text-neutral-300">
-                                                        {new Date(upload.created_at).toLocaleDateString()}
+                                                    <span className="text-sm lg:text-base text-neutral-300">
+                                                        {new Date(upload.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })} • {new Date(upload.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST
                                                     </span>
                                                     {upload.ocr_status === "completed" && upload.match_score != null ? (
-                                                        <span className={`text-sm font-semibold px-2 py-1 rounded-lg ${upload.match_score >= 80 ? "bg-green-500/10 text-green-400" :
-                                                            upload.match_score >= 50 ? "bg-yellow-500/10 text-yellow-400" :
-                                                                "bg-red-500/10 text-red-400"
-                                                            }`}>
-                                                            {upload.match_score}%
+                                                        <span className={`flex flex-col items-end gap-0.5`}>
+                                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Notes Match</span>
+                                                            <span className={`text-sm font-bold px-2.5 py-0.5 rounded-lg ${upload.match_score >= 80 ? "bg-green-500/10 text-green-400" :
+                                                                upload.match_score >= 50 ? "bg-yellow-500/10 text-yellow-400" :
+                                                                    "bg-red-500/10 text-red-400"
+                                                                }`}>{upload.match_score}%</span>
                                                         </span>
                                                     ) : upload.ocr_status === "processing" ? (
-                                                        <span className="text-xs text-neutral-500 flex items-center gap-1">
+                                                        <span className="text-xs text-neutral-400 flex items-center gap-1">
                                                             <Loader2 className="w-3 h-3 animate-spin" /> Processing
                                                         </span>
                                                     ) : upload.ocr_status === "failed" ? (
@@ -406,14 +413,14 @@ export function StudentDashboard() {
                                                 </div>
                                             </button>
 
-                                            {/* Inline AI Feedback Panel — expands directly below the row */}
+                                            {/* Inline AI Feedback Panel */}
                                             {isExpanded && fb && (
-                                                <div className="p-4 rounded-b-xl bg-neutral-900 border border-t-0 border-purple-500/50 space-y-3">
-                                                    <h3 className="font-semibold text-white text-sm">AI Feedback</h3>
+                                                <div className="p-5 lg:p-6 rounded-b-xl bg-neutral-900 border border-t-0 border-purple-500/50 space-y-4">
+                                                    <h3 className="font-semibold text-white text-base">AI Feedback</h3>
                                                     {/* Score bar */}
-                                                    <div className="space-y-1">
-                                                        <div className="flex justify-between text-sm">
-                                                            <span className="text-neutral-400">Match Score</span>
+                                                    <div className="space-y-1.5">
+                                                        <div className="flex justify-between text-sm lg:text-base">
+                                                            <span className="text-neutral-300">Match Score</span>
                                                             <span className="font-semibold text-white">{fb.score}%</span>
                                                         </div>
                                                         <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
@@ -425,23 +432,25 @@ export function StudentDashboard() {
                                                             />
                                                         </div>
                                                     </div>
-                                                    <p className="text-sm text-neutral-300">{fb.feedback}</p>
-                                                    {fb.covered.length > 0 && (
-                                                        <div>
-                                                            <p className="text-xs font-medium text-green-400 mb-1">✅ Covered</p>
-                                                            <ul className="text-sm text-neutral-400 space-y-1">
-                                                                {fb.covered.map((c, i) => <li key={i}>• {c}</li>)}
-                                                            </ul>
-                                                        </div>
-                                                    )}
-                                                    {fb.missing.length > 0 && (
-                                                        <div>
-                                                            <p className="text-xs font-medium text-red-400 mb-1">❌ Missing</p>
-                                                            <ul className="text-sm text-neutral-400 space-y-1">
-                                                                {fb.missing.map((m, i) => <li key={i}>• {m}</li>)}
-                                                            </ul>
-                                                        </div>
-                                                    )}
+                                                    <p className="text-sm lg:text-base text-neutral-300 leading-relaxed">{fb.feedback}</p>
+                                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                                        {fb.covered.length > 0 && (
+                                                            <div>
+                                                                <p className="text-xs font-semibold text-green-400 mb-2 uppercase tracking-wide">✅ Covered</p>
+                                                                <ul className="text-sm text-neutral-300 space-y-1.5">
+                                                                    {fb.covered.map((c: string, i: number) => <li key={i} className="flex gap-2"><span className="text-green-500">•</span>{c}</li>)}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                        {fb.missing.length > 0 && (
+                                                            <div>
+                                                                <p className="text-xs font-semibold text-red-400 mb-2 uppercase tracking-wide">❌ Missing</p>
+                                                                <ul className="text-sm text-neutral-300 space-y-1.5">
+                                                                    {fb.missing.map((m: string, i: number) => <li key={i} className="flex gap-2"><span className="text-red-500">•</span>{m}</li>)}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
@@ -451,21 +460,21 @@ export function StudentDashboard() {
                         )}
 
                         {/* Upload Area */}
-                        <div className="min-h-[300px] border-2 border-dashed border-neutral-800 rounded-3xl p-6 flex flex-col relative bg-neutral-900/20">
+                        <div className="min-h-[300px] lg:min-h-[380px] border-2 border-dashed border-neutral-800 rounded-3xl p-6 flex flex-col relative bg-neutral-900/20">
                             <input type="file" accept="image/*" multiple className="hidden" ref={galleryInputRef} onChange={handleFileChange} />
 
                             {files.length === 0 ? (
                                 <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4">
-                                    <div className="w-16 h-16 rounded-full bg-neutral-800/50 flex items-center justify-center">
-                                        <Smartphone className="w-8 h-8 text-neutral-500" />
+                                    <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-neutral-800/50 flex items-center justify-center">
+                                        <Smartphone className="w-8 h-8 lg:w-10 lg:h-10 text-neutral-500" />
                                     </div>
                                     <div>
-                                        <h3 className="text-xl font-semibold text-white">Capture Notes</h3>
-                                        <p className="text-neutral-500 text-sm">Take photos of your handwritten notes</p>
+                                        <h3 className="text-xl lg:text-2xl font-semibold text-white">Capture Notes</h3>
+                                        <p className="text-neutral-400 text-sm lg:text-base mt-1">Take photos of your handwritten notes</p>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-20">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
                                     {previews.map((src, idx) => (
                                         <div key={idx} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-neutral-800">
                                             <Image src={src} alt="preview" fill className="object-cover" />
@@ -535,9 +544,9 @@ export function StudentDashboard() {
 
                         {/* Logs */}
                         {logs.length > 0 && (
-                            <div className="p-4 rounded-xl bg-neutral-900 border border-neutral-800 max-h-40 overflow-y-auto space-y-1">
+                            <div className="p-4 lg:p-5 rounded-xl bg-neutral-900 border border-neutral-800 max-h-40 overflow-y-auto space-y-1">
                                 {logs.map((log, i) => (
-                                    <div key={i} className="text-sm font-mono text-neutral-400">{log}</div>
+                                    <div key={i} className="text-sm font-mono text-neutral-300">{log}</div>
                                 ))}
                             </div>
                         )}

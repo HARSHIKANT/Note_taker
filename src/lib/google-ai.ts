@@ -117,7 +117,8 @@ async function downloadFromDrive(
 // ── OCR: with model fallback chain + round-based retry ──────────────────────
 export async function ocrImageFromDrive(
     accessToken: string,
-    fileIds: string[]
+    fileIds: string[],
+    geminiApiKey: string
 ): Promise<string> {
     // Download all images in parallel (only once — reused across all retries)
     const downloads = await Promise.all(
@@ -129,7 +130,7 @@ export async function ocrImageFromDrive(
         { text: "Extract ALL text from these images of handwritten notes. Organize and structure the extracted text logically (e.g., using headings, bullet points, and appropriate formatting based on the layout of the notes). Combine the text from all pages cohesively. Output ONLY the structured text content, nothing else. If no text is found, respond with exactly: NO_TEXT_FOUND" },
     ];
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
 
     const extractedText = await callWithModelFallback("OCR", async (modelName) => {
         const model = genAI.getGenerativeModel({ model: modelName, generationConfig: { temperature: 0 } });
@@ -188,7 +189,8 @@ export interface AudioTranscriptionResult {
 // ── Gemini: Transcribe audio/video ────────────────────────────────────
 export async function transcribeRecordingFromSupabase(
     filePath: string,
-    mimeType: string
+    mimeType: string,
+    geminiApiKey: string
 ): Promise<AudioTranscriptionResult> {
     console.log(`[Transcription] Downloading ${filePath} from Supabase...`);
     const { data: blob, error } = await supabase.storage.from("recordings").download(filePath);
@@ -203,7 +205,7 @@ export async function transcribeRecordingFromSupabase(
     fs.writeFileSync(tempFile, buffer);
 
     console.log(`[Transcription] Uploading ${tempFile} to Google AI File Manager...`);
-    const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY!);
+    const fileManager = new GoogleAIFileManager(geminiApiKey);
     const uploadResult = await fileManager.uploadFile(tempFile, {
         mimeType,
         displayName: filePath,
@@ -213,7 +215,7 @@ export async function transcribeRecordingFromSupabase(
     fs.unlinkSync(tempFile);
 
     console.log(`[Transcription] Gemini generating transcript using file URI: ${uploadResult.file.uri}`);
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
 
     const TRANSCRIPTION_PROMPT = `You are a Classroom Audio Auditor. Listen to this lecture recording carefully and perform the following analysis.
 
@@ -317,9 +319,10 @@ Return ONLY a valid JSON object. Nothing else.
 // ── Gemini: Analyse a plain-text transcript ────────────────────────────────
 // Used when a teacher manually types/pastes a transcript (no audio file)
 export async function analyzeTranscriptText(
-    transcript: string
+    transcript: string,
+    geminiApiKey: string
 ): Promise<AudioInsights> {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
 
     const ANALYSIS_PROMPT = `You are a Classroom Transcript Auditor. Analyse the following lecture transcript and return ONLY a valid JSON object — no markdown, no extra text.
 
@@ -413,9 +416,10 @@ export interface MatchResult {
 
 export async function compareNotesWithLecture(
     ocrText: string,
-    lectureContent: string
+    lectureContent: string,
+    geminiApiKey: string
 ): Promise<MatchResult> {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
 
     const prompt = `You are a strict educational AI assistant and forensic text analyzer. You have two distinct tasks:
 

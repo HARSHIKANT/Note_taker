@@ -40,6 +40,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (!session.geminiApiKey) {
+        return NextResponse.json(
+            { error: "Gemini API key is required. Please add your key in Settings." },
+            { status: 403 }
+        );
+    }
+
+    const geminiApiKey = session.geminiApiKey;
+
     const body = await req.json();
     const { upload_id, file_ids, lecture_id } = body;
 
@@ -56,7 +65,7 @@ export async function POST(req: NextRequest) {
     try {
         // 1. OCR all images together (with retry on rate limit)
         const ocrText = await withRetry(
-            () => ocrImageFromDrive(session.accessToken!, file_ids),
+            () => ocrImageFromDrive(session.accessToken!, file_ids, geminiApiKey),
             3,
             "OCR"
         );
@@ -86,7 +95,7 @@ export async function POST(req: NextRequest) {
 
         // 3. Compare with Gemini (with retry on rate limit)
         const matchResult = await withRetry(
-            () => compareNotesWithLecture(ocrText, lecture.content),
+            () => compareNotesWithLecture(ocrText, lecture.content, geminiApiKey),
             3,
             "Compare"
         );
@@ -181,7 +190,7 @@ export async function POST(req: NextRequest) {
 
                 if (allMissingTopics.length > 0) {
                     try {
-                        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+                        const genAI = new GoogleGenerativeAI(geminiApiKey);
 
                         // Get lecture title for better context
                         const { data: lec } = await supabase

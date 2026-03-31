@@ -10,12 +10,16 @@ import { NewLectureView } from "./dashboard/NewLectureView";
 import { SubmissionsView } from "./dashboard/SubmissionsView";
 import { TeacherAnalyticsView } from "./dashboard/TeacherAnalyticsView";
 import { HeadTeacherAnalyticsView } from "./dashboard/HeadTeacherAnalyticsView";
+import ApiKeyModal from "./ApiKeyModal";
+import type { ExtendedSession } from "@/lib/types";
 
 type View = "subjects" | "lectures" | "new-lecture" | "submissions" | "analytics";
 
 export function TeacherDashboard() {
-    const { data: session } = useSession();
-    const isHeadTeacher = (session as any)?.isHeadTeacher ?? false;
+    const { data: session, update } = useSession();
+    const extSession = session as unknown as ExtendedSession;
+    const isHeadTeacher = extSession?.isHeadTeacher ?? false;
+    const hasApiKey = !!extSession?.geminiApiKey;
 
     const [view, setView] = useState<View>("subjects");
     const [selectedSubject, setSelectedSubject] = useState<string>("");
@@ -140,9 +144,11 @@ export function TeacherDashboard() {
 
     return (
         <div className="min-h-screen bg-neutral-950 text-neutral-200 font-sans">
+            {/* API Key Modal — shown until teacher provides their key */}
+            {!hasApiKey && <ApiKeyModal onSaved={() => update()} />}
             {/* Header */}
-            <div className="sticky top-0 z-30 bg-neutral-950/80 backdrop-blur-xl border-b border-neutral-800">
-                <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="sticky top-0 z-30 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-800">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 lg:py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         {view !== "subjects" && (
                             <button
@@ -160,44 +166,46 @@ export function TeacherDashboard() {
                             </button>
                         )}
                         <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm ${isHeadTeacher
-                                    ? "bg-gradient-to-tr from-amber-400 to-orange-500 shadow-md shadow-amber-500/30"
-                                    : "bg-gradient-to-tr from-blue-500 to-cyan-500"
+                            <div className={`w-10 h-10 lg:w-11 lg:h-11 rounded-full flex items-center justify-center text-white font-bold text-base ${isHeadTeacher
+                                ? "bg-gradient-to-tr from-amber-400 to-orange-500 shadow-md shadow-amber-500/30"
+                                : "bg-gradient-to-tr from-blue-500 to-cyan-500"
                                 }`}>
-                                {session?.user?.name?.[0] || "T"}
+                                {extSession?.user?.name?.[0] || "T"}
                             </div>
                             <div>
-                                <p className="font-semibold text-white text-sm flex items-center gap-1.5">
-                                    {session?.user?.name}
+                                <p className="font-semibold text-white text-sm lg:text-base flex items-center gap-1.5">
+                                    {extSession?.user?.name}
                                     {isHeadTeacher && (
                                         <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 border border-amber-400/30 px-1.5 py-0.5 rounded-full">HEAD</span>
                                     )}
                                 </p>
-                                <p className="text-xs text-neutral-500">{isHeadTeacher ? "Head Teacher" : "Teacher"}</p>
+                                <p className="text-xs lg:text-sm text-neutral-400">{isHeadTeacher ? "Head Teacher" : "Teacher"}</p>
                             </div>
                         </div>
                     </div>
-                    <button
-                        onClick={() => setView(view === "analytics" ? "subjects" : "analytics")}
-                        className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition-colors ${view === "analytics"
-                            ? isHeadTeacher ? "bg-amber-500/20 text-amber-400" : "bg-blue-600 text-white"
-                            : isHeadTeacher ? "hover:bg-amber-500/10 text-amber-600 hover:text-amber-400" : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
-                            }`}
-                    >
-                        <BarChart2 className="w-5 h-5" />
-                        <span className="text-[9px] font-medium leading-none">Analytics</span>
-                    </button>
-                    <button
-                        onClick={() => signOut()}
-                        className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"
-                    >
-                        <LogOut className="w-5 h-5" />
-                        <span className="text-[9px] font-medium leading-none">Sign out</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setView(view === "analytics" ? "subjects" : "analytics")}
+                            className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-colors text-sm font-medium ${view === "analytics"
+                                ? isHeadTeacher ? "bg-amber-500/20 text-amber-400" : "bg-blue-600 text-white"
+                                : isHeadTeacher ? "hover:bg-amber-500/10 text-amber-600 hover:text-amber-400" : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
+                                }`}
+                        >
+                            <BarChart2 className="w-5 h-5" />
+                            <span className="hidden sm:inline">Analytics</span>
+                        </button>
+                        <button
+                            onClick={() => signOut()}
+                            className="flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg text-red-500 hover:bg-red-500/10 hover:text-red-400 transition-colors text-sm font-medium"
+                        >
+                            <LogOut className="w-5 h-5" />
+                            <span className="hidden sm:inline">Sign out</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10 space-y-6">
                 {view === "subjects" && (
                     <SubjectsView onSelectSubject={openSubject} />
                 )}

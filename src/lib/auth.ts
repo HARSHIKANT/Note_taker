@@ -20,8 +20,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }),
     ],
     callbacks: {
-        async jwt({ token, account, profile, trigger }) {
+        async jwt({ token, account, profile, trigger, session }) {
             const extendedToken = token as ExtendedToken;
+
+            // 0) If client calls update({ geminiApiKey }), write it directly to the token
+            if (trigger === "update" && session?.geminiApiKey !== undefined) {
+                extendedToken.geminiApiKey = session.geminiApiKey ?? null;
+                return extendedToken;
+            }
 
             // 1) Initial Sign-In: Save access/refresh tokens from the Google account response
             if (account) {
@@ -37,7 +43,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 if (email) {
                     const { data: existingUser } = await supabase
                         .from("users")
-                        .select("id, role, class, is_head_teacher")
+                        .select("id, role, class, is_head_teacher, gemini_api_key")
                         .eq("email", email)
                         .single();
 
@@ -46,6 +52,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         extendedToken.role = existingUser.role;
                         extendedToken.class = existingUser.class;
                         extendedToken.isHeadTeacher = existingUser.is_head_teacher ?? false;
+                        extendedToken.geminiApiKey = existingUser.gemini_api_key ?? null;
                     } else {
                         const { data: newUser } = await supabase
                             .from("users")
@@ -62,11 +69,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 }
             }
 
-            // 2) Re-fetch role from Supabase when session is updated or role is missing
-            if ((trigger === "update" || !extendedToken.role) && extendedToken.email) {
+            // 2) Re-fetch role from Supabase when session is updated, role is missing,
+            //    or geminiApiKey has never been loaded (preexisting sessions)
+            if ((trigger === "update" || !extendedToken.role || extendedToken.geminiApiKey === undefined) && extendedToken.email) {
                 const { data: user } = await supabase
                     .from("users")
-                    .select("id, role, class, is_head_teacher")
+                    .select("id, role, class, is_head_teacher, gemini_api_key")
                     .eq("email", extendedToken.email as string)
                     .single();
 
@@ -75,6 +83,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     extendedToken.role = user.role;
                     extendedToken.class = user.class;
                     extendedToken.isHeadTeacher = user.is_head_teacher ?? false;
+                    extendedToken.geminiApiKey = user.gemini_api_key ?? null;
                 }
             }
 
@@ -122,11 +131,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             return {
                 ...session,
                 accessToken: t.accessToken,
-                error: t.error, // pass any token rotation errors to the client
+                error: t.error,
                 userId: t.userId,
                 role: t.role,
                 class: t.class,
                 isHeadTeacher: t.isHeadTeacher ?? false,
+                geminiApiKey: t.geminiApiKey ?? null,
             };
         },
     },
