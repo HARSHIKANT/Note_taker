@@ -26,34 +26,46 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
 
         setTranscribing(true);
         try {
-            // Step 1: Upload via backend (uses service key, bypasses RLS)
-            const uploadForm = new FormData();
-            uploadForm.append("file", file);
-
-            const uploadRes = await fetch("/api/lectures/upload-audio", {
+            // Step 1 — get a signed upload URL from our API (tiny JSON request, well under Vercel's 4.5MB limit)
+            const signRes = await fetch("/api/lectures/upload-audio", {
                 method: "POST",
-                body: uploadForm,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fileName: file.name, mimeType: file.type }),
             });
-            const uploadData = await uploadRes.json();
+            const signData = await signRes.json();
 
-            if (!uploadRes.ok) {
-                alert("Failed to upload recording: " + uploadData.error);
+            if (!signRes.ok) {
+                alert("Failed to prepare upload: " + signData.error);
                 setTranscribing(false);
                 return;
             }
 
-            // Step 2: Transcribe — returns labelled transcript text
+            // Step 2 — PUT the file DIRECTLY to Supabase Storage (bypasses Vercel entirely)
+            // This is what fixes the 413 / FUNCTION_PAYLOAD_TOO_LARGE error for large files.
+            const putRes = await fetch(signData.signedUrl, {
+                method: "PUT",
+                headers: { "Content-Type": file.type },
+                body: file,
+            });
+
+            if (!putRes.ok) {
+                alert("Failed to upload recording to storage. Please try again.");
+                setTranscribing(false);
+                return;
+            }
+
+            // Step 3 — trigger transcription with just the stored file path (no file payload)
             const transcribeRes = await fetch("/api/lectures/transcribe", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ filePath: uploadData.filePath, mimeType: file.type }),
+                body: JSON.stringify({ filePath: signData.filePath, mimeType: file.type }),
             });
 
             const transcribeData = await transcribeRes.json();
 
             if (transcribeRes.ok) {
                 setTranscript(transcribeData.transcript);
-                setIsAudioTranscript(true); // Lock transcript — it came from audio, teacher cannot edit
+                setIsAudioTranscript(true); // Lock transcript — came from audio, teacher cannot edit
             } else {
                 alert("Transcription failed: " + transcribeData.error);
             }
@@ -62,6 +74,7 @@ export function NewLectureView({ selectedSubject, onSave }: NewLectureViewProps)
         }
         setTranscribing(false);
     };
+
 
     const handleSave = async (publish: boolean) => {
         if (!title || !targetClass || !transcript) {

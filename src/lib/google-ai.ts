@@ -277,7 +277,7 @@ Return ONLY a valid JSON object. Nothing else.
     const raw = await callWithModelFallback("Transcription", async (modelName) => {
         const model = genAI.getGenerativeModel({
             model: modelName,
-            generationConfig: { temperature: 0, responseMimeType: "application/json", maxOutputTokens: 8192 },
+            generationConfig: { temperature: 0, responseMimeType: "application/json", maxOutputTokens: 16384 },
         });
         const result = await model.generateContent([
             { fileData: { mimeType: uploadResult.file.mimeType, fileUri: uploadResult.file.uri } },
