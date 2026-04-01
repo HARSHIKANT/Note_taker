@@ -226,6 +226,7 @@ export function TeacherDashboard() {
                     <NewLectureView
                         selectedSubject={selectedSubject}
                         onSave={saveLecture}
+                        geminiApiKey={extSession?.geminiApiKey ?? ""}
                     />
                 )}
 

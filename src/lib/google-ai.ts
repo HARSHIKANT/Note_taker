@@ -186,6 +186,41 @@ export interface AudioTranscriptionResult {
     insights: AudioInsights;
 }
 
+// ── Gemini: Upload audio to File Manager only (server-side, fast, no generation) ────
+// Used by the chunked transcription flow: returns the fileUri so the client-side JS
+// can call generateContent directly from the browser (bypassing Vercel's 10s timeout).
+export async function uploadRecordingToFileManager(
+    filePath: string,
+    mimeType: string,
+    geminiApiKey: string
+): Promise<{ fileUri: string; fileName: string; fileMimeType: string }> {
+    console.log(`[Transcription] Downloading ${filePath} from Supabase...`);
+    const { data: blob, error } = await supabase.storage.from("recordings").download(filePath);
+    if (error || !blob) {
+        throw new Error("Failed to download recording from Supabase: " + error?.message);
+    }
+
+    const buffer = Buffer.from(await blob.arrayBuffer());
+    const tempFile = path.join(os.tmpdir(), `upload_${Date.now()}_${path.basename(filePath)}`);
+    fs.writeFileSync(tempFile, buffer);
+
+    console.log(`[Transcription] Uploading ${tempFile} to Google AI File Manager...`);
+    const fileManager = new GoogleAIFileManager(geminiApiKey);
+    const uploadResult = await fileManager.uploadFile(tempFile, {
+        mimeType,
+        displayName: filePath,
+    });
+
+    fs.unlinkSync(tempFile);
+    console.log(`[Transcription] File uploaded. URI: ${uploadResult.file.uri}`);
+
+    return {
+        fileUri: uploadResult.file.uri,
+        fileName: uploadResult.file.name, // needed later to delete from Gemini storage
+        fileMimeType: uploadResult.file.mimeType,
+    };
+}
+
 // ── Gemini: Transcribe audio/video ────────────────────────────────────
 export async function transcribeRecordingFromSupabase(
     filePath: string,
@@ -379,7 +414,7 @@ ${transcript}`;
     const raw = await callWithModelFallback("analyzeTranscriptText", async (modelName) => {
         const model = genAI.getGenerativeModel({
             model: modelName,
-            generationConfig: { temperature: 0, responseMimeType: "application/json", maxOutputTokens: 8192 },
+            generationConfig: { temperature: 0, responseMimeType: "application/json", maxOutputTokens: 16384 },
         });
         const result = await model.generateContent([{ text: ANALYSIS_PROMPT }]);
         return result.response.text().trim();
