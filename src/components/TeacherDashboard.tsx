@@ -33,6 +33,7 @@ export function TeacherDashboard() {
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [loadingSubs, setLoadingSubs] = useState(false);
     const [insights, setInsights] = useState<any>(null);
+    const [insightsLastGeneratedAt, setInsightsLastGeneratedAt] = useState<string | null>(null);
     const [aiDetectionInsights, setAiDetectionInsights] = useState<any>(null);
 
     const fetchLectures = async (subject: string) => {
@@ -134,7 +135,8 @@ export function TeacherDashboard() {
             const insRes = await fetch(`/api/submissions/insights?lecture_id=${lecture.id}`);
             if (insRes.ok) {
                 const insData = await insRes.json();
-                setInsights(insData);
+                setInsights(insData.insights ?? null);
+                setInsightsLastGeneratedAt(insData.insights_last_generated_at ?? null);
             }
         } catch {
             setSubmissions([]);
@@ -236,6 +238,7 @@ export function TeacherDashboard() {
                         submissions={submissions}
                         loadingSubs={loadingSubs}
                         insights={insights}
+                        insightsLastGeneratedAt={insightsLastGeneratedAt}
                         aiDetectionInsights={aiDetectionInsights}
                     />
                 )}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Users, TrendingUp, AlertCircle, Cpu, User } from "lucide-react";
+import { Loader2, Users, TrendingUp, AlertCircle, Cpu, RefreshCw, Sparkles } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Lecture, Submission } from "./types";
 
@@ -8,6 +8,7 @@ interface SubmissionsViewProps {
     submissions: Submission[];
     loadingSubs: boolean;
     insights: any;
+    insightsLastGeneratedAt?: string | null;
     aiDetectionInsights: any;
 }
 
@@ -15,11 +16,45 @@ export function SubmissionsView({
     lecture,
     submissions,
     loadingSubs,
-    insights,
+    insights: initialInsights,
+    insightsLastGeneratedAt: initialLastGeneratedAt,
     aiDetectionInsights,
 }: SubmissionsViewProps) {
     const [activeTab, setActiveTab] = useState<"notes" | "ai">("notes");
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [insights, setInsights] = useState<any>(initialInsights);
+    const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(initialLastGeneratedAt ?? null);
+    const [generatingInsights, setGeneratingInsights] = useState(false);
+
+    const handleGenerateInsights = async () => {
+        setGeneratingInsights(true);
+        try {
+            const res = await fetch("/api/lectures/generate-insights", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ lecture_id: lecture.id }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setInsights(data.insights);
+                setLastGeneratedAt(data.insights_last_generated_at);
+            } else {
+                alert("Failed to generate insights: " + data.error);
+            }
+        } catch (err: any) {
+            alert("Error: " + err.message);
+        }
+        setGeneratingInsights(false);
+    };
+
+    const formatTimeAgo = (iso: string) => {
+        const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+        if (mins < 1) return "just now";
+        if (mins < 60) return `${mins} min ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs} hour${hrs > 1 ? "s" : ""} ago`;
+        return `${Math.floor(hrs / 24)} day${Math.floor(hrs / 24) > 1 ? "s" : ""} ago`;
+    };
 
     return (
         <>
@@ -62,64 +97,110 @@ export function SubmissionsView({
                         </button>
                     </div>
 
-                    {/* Notes Analysis Insights Panel */}
-                    {activeTab === "notes" && insights && (
+                    {/* Notes Analysis — On-Demand Class Insights Panel */}
+                    {activeTab === "notes" && (
                         <div className="p-5 lg:p-7 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-5">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-xl">
-                                    <TrendingUp className="w-6 h-6" />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-white text-base lg:text-lg">Class Insights</h3>
-                                    <p className="text-xs lg:text-sm text-neutral-400">AI-generated summary of class performance</p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                {/* Left: Score Distribution */}
-                                <div className="p-5 rounded-xl bg-neutral-950/50 border border-neutral-800">
-                                    <div className="flex justify-between items-end mb-5">
-                                        <span className="text-sm lg:text-base text-neutral-300 font-medium">Average Score</span>
-                                        <span className={`text-3xl lg:text-4xl font-bold ${insights.averageScore >= 80 ? 'text-green-400' :
-                                            insights.averageScore >= 50 ? 'text-yellow-400' : 'text-red-400'
-                                            }`}>{insights.averageScore}%</span>
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-xl">
+                                        <TrendingUp className="w-6 h-6" />
                                     </div>
-                                    <div className="h-40 lg:h-52 w-full">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={insights.scoreDistribution} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                                                <XAxis dataKey="range" stroke="#525252" fontSize={11} tickLine={false} axisLine={false} />
-                                                <YAxis stroke="#525252" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
-                                                <Tooltip
-                                                    cursor={{ fill: '#262626' }}
-                                                    contentStyle={{ backgroundColor: '#171717', border: '1px solid #262626', borderRadius: '8px', color: '#fff', fontSize: '13px' }}
-                                                />
-                                                <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
+                                    <div>
+                                        <h3 className="font-semibold text-white text-base lg:text-lg">Class Insights</h3>
+                                        {lastGeneratedAt ? (
+                                            <p className="text-xs text-neutral-500">Last generated: {formatTimeAgo(lastGeneratedAt)}</p>
+                                        ) : (
+                                            <p className="text-xs lg:text-sm text-neutral-400">AI-generated summary of class performance</p>
+                                        )}
                                     </div>
                                 </div>
-
-                                {/* Right: Most Missed Concepts */}
-                                <div className="p-5 rounded-xl bg-neutral-950/50 border border-neutral-800 space-y-3">
-                                    <div className="flex items-center gap-2">
-                                        <AlertCircle className="w-4 h-4 text-orange-400" />
-                                        <span className="text-sm lg:text-base font-semibold text-white">Most Missed Concepts</span>
-                                    </div>
-                                    <p className="text-sm text-neutral-300 leading-relaxed">
-                                        {insights.missedConceptsSummary}
-                                    </p>
-                                    {insights.missingTopicsList?.length > 0 && (
-                                        <ul className="text-sm text-neutral-400 space-y-1.5 mt-2">
-                                            {insights.missingTopicsList.map((topic: string, i: number) => (
-                                                <li key={i} className="flex gap-2">
-                                                    <span className="text-orange-400/70">•</span>
-                                                    {topic}
-                                                </li>
-                                            ))}
-                                        </ul>
+                                <button
+                                    onClick={handleGenerateInsights}
+                                    disabled={generatingInsights}
+                                    className={`flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl transition-all disabled:opacity-50 shrink-0 ${insights
+                                        ? "bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700"
+                                        : "bg-blue-600 hover:bg-blue-500 text-white"
+                                        }`}
+                                >
+                                    {generatingInsights ? (
+                                        <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing...</>
+                                    ) : insights ? (
+                                        <><RefreshCw className="w-4 h-4" /> Regenerate</>
+                                    ) : (
+                                        <><Sparkles className="w-4 h-4" /> Generate Class Insights</>
                                     )}
-                                </div>
+                                </button>
                             </div>
+
+                            {/* Empty state */}
+                            {!insights && !generatingInsights && (
+                                <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
+                                    <div className="p-4 bg-blue-500/10 rounded-full">
+                                        <Sparkles className="w-7 h-7 text-blue-400" />
+                                    </div>
+                                    <p className="text-white font-medium">No insights generated yet</p>
+                                    <p className="text-sm text-neutral-400 max-w-xs">
+                                        Click "Generate Class Insights" once all students have submitted for the most accurate summary.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Loading state */}
+                            {generatingInsights && (
+                                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                                    <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+                                    <p className="text-sm text-neutral-400">Analyzing class submissions...</p>
+                                </div>
+                            )}
+
+                            {/* Insights data */}
+                            {insights && !generatingInsights && (
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    {/* Left: Score Distribution */}
+                                    <div className="p-5 rounded-xl bg-neutral-950/50 border border-neutral-800">
+                                        <div className="flex justify-between items-end mb-5">
+                                            <span className="text-sm lg:text-base text-neutral-300 font-medium">Average Score</span>
+                                            <span className={`text-3xl lg:text-4xl font-bold ${insights.averageScore >= 80 ? 'text-green-400' :
+                                                insights.averageScore >= 50 ? 'text-yellow-400' : 'text-red-400'
+                                                }`}>{insights.averageScore}%</span>
+                                        </div>
+                                        <div className="h-40 lg:h-52 w-full">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart data={insights.scoreDistribution} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                                                    <XAxis dataKey="range" stroke="#525252" fontSize={11} tickLine={false} axisLine={false} />
+                                                    <YAxis stroke="#525252" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                                                    <Tooltip
+                                                        cursor={{ fill: '#262626' }}
+                                                        contentStyle={{ backgroundColor: '#171717', border: '1px solid #262626', borderRadius: '8px', color: '#fff', fontSize: '13px' }}
+                                                    />
+                                                    <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+
+                                    {/* Right: Most Missed Concepts */}
+                                    <div className="p-5 rounded-xl bg-neutral-950/50 border border-neutral-800 space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <AlertCircle className="w-4 h-4 text-orange-400" />
+                                            <span className="text-sm lg:text-base font-semibold text-white">Most Missed Concepts</span>
+                                        </div>
+                                        <p className="text-sm text-neutral-300 leading-relaxed">
+                                            {insights.missedConceptsSummary}
+                                        </p>
+                                        {insights.missingTopicsList?.length > 0 && (
+                                            <ul className="text-sm text-neutral-400 space-y-1.5 mt-2">
+                                                {insights.missingTopicsList.map((topic: string, i: number) => (
+                                                    <li key={i} className="flex gap-2">
+                                                        <span className="text-orange-400/70">•</span>
+                                                        {topic}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -321,7 +402,7 @@ export function SubmissionsView({
 
                                                                     <div className="space-y-1">
                                                                         <div className="flex justify-between text-[10px] font-bold uppercase tracking-wide">
-                                                                            <span className="flex items-center gap-1 text-green-500"><User className="w-3 h-3" /> Human</span>
+                                                                            <span className="flex items-center gap-1 text-green-500"><Users className="w-3 h-3" /> Human</span>
                                                                             <span className="text-green-500">{sub.human_probability || 0}%</span>
                                                                         </div>
                                                                         <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">

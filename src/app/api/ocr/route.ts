@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { ocrImageFromDrive, compareNotesWithLecture, callWithModelFallback } from "@/lib/google-ai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { ocrImageFromDrive, compareNotesWithLecture } from "@/lib/google-ai";
 import type { ExtendedSession } from "@/lib/types";
 
 // Helper: retry a function with delay on 429 errors
@@ -121,11 +120,12 @@ export async function POST(req: NextRequest) {
             .eq("lecture_id", lecture_id)
             .eq("ocr_status", "completed");
 
+        // ── Section A: AI Detection Stats (pure math, no Gemini call) ──────────────
+        // Class-wide missing topics aggregation (Insights) is intentionally NOT done here.
+        // It is triggered on-demand by the teacher via POST /api/lectures/generate-insights.
         let aiDetectionInsights: any = null;
-        let insights = null;
 
         if (uploadsData && uploadsData.length > 0) {
-            // A) AI Detection Insights
             const aiUploads = uploadsData.filter(u => u.ai_probability !== null);
             if (aiUploads.length > 0) {
                 let sumAI = 0;
@@ -139,119 +139,22 @@ export async function POST(req: NextRequest) {
                 for (const sub of aiUploads) {
                     const prob = sub.ai_probability || 0;
                     sumAI += prob;
-
                     if (prob <= 20) aiDistribution[0].count++;
                     else if (prob <= 50) aiDistribution[1].count++;
                     else if (prob <= 80) aiDistribution[2].count++;
                     else aiDistribution[3].count++;
                 }
 
-                const averageAiProbability = sumAI / aiUploads.length;
                 aiDetectionInsights = {
-                    averageAiProbability,
+                    averageAiProbability: sumAI / aiUploads.length,
                     distribution: aiDistribution
                 };
             }
 
-            // B) Insights Engine
-            const scoredUploads = uploadsData.filter(u => u.match_score !== null);
-            if (scoredUploads.length > 0) {
-                let totalScore = 0;
-                const distribution = [
-                    { range: "0-40%", count: 0 },
-                    { range: "41-60%", count: 0 },
-                    { range: "61-80%", count: 0 },
-                    { range: "81-100%", count: 0 },
-                ];
-                const allMissingTopics: string[] = [];
-
-                for (const sub of scoredUploads) {
-                    const score = sub.match_score || 0;
-                    totalScore += score;
-
-                    if (score <= 40) distribution[0].count++;
-                    else if (score <= 60) distribution[1].count++;
-                    else if (score <= 80) distribution[2].count++;
-                    else distribution[3].count++;
-
-                    if (sub.ai_feedback) {
-                        try {
-                            const fb = typeof sub.ai_feedback === 'string' ? JSON.parse(sub.ai_feedback) : sub.ai_feedback;
-                            if (fb.missing && Array.isArray(fb.missing)) {
-                                allMissingTopics.push(...fb.missing);
-                            }
-                        } catch { }
-                    }
-                }
-
-                const averageScore = Math.round(totalScore / scoredUploads.length);
-                let missedConceptsSummary = "No significant concepts were missed by the class.";
-                let aggregatedMissingList: string[] = [];
-
-                if (allMissingTopics.length > 0) {
-                    try {
-                        const genAI = new GoogleGenerativeAI(geminiApiKey);
-
-                        // Get lecture title for better context
-                        const { data: lec } = await supabase
-                            .from("lectures")
-                            .select("title")
-                            .eq("id", lecture_id)
-                            .single();
-
-                        const prompt = `You are an AI teaching assistant analyzing class performance. 
-Here is a raw list of topics that various students missed in their notes for the lecture "${lec?.title || "Unknown"}":
-${JSON.stringify(allMissingTopics)}
-
-Your task:
-1. Aggregate and group identical or highly similar concepts.
-2. Identify the most commonly missed concepts across the class.
-3. Return a JSON object with:
-   - "summary": A short, 1-2 sentence paragraph summarizing the main knowledge gaps for the teacher.
-   - "top_missed": An array of strings representing the top 3 to 5 most frequently missed consolidated concepts.
-
-Return ONLY valid JSON. Nothing else.`;
-
-                        // Model fallback: primary → gemini-3-flash → gemini-3.1-flash-lite (with round-based waits)
-                        const insightRaw = await callWithModelFallback("Insights", async (modelName) => {
-                            const model = genAI.getGenerativeModel({ model: modelName });
-                            const result = await model.generateContent(prompt);
-                            return result.response.text();
-                        });
-
-                        if (insightRaw) {
-                            const cleaned = insightRaw.replace(/```json\n?|\n?```/g, "").trim();
-                            const parsed = JSON.parse(cleaned);
-                            if (parsed.summary) missedConceptsSummary = parsed.summary;
-                            if (parsed.top_missed) aggregatedMissingList = parsed.top_missed;
-                        }
-                    } catch (err) {
-                        console.error("Failed to aggregate insights via AI:", err);
-                        missedConceptsSummary = "Failed to load AI insights.";
-                    }
-                }
-
-                insights = {
-                    averageScore,
-                    scoreDistribution: distribution,
-                    missedConceptsSummary,
-                    missingTopicsList: aggregatedMissingList
-                };
-            }
-
-            // Update both aggregate JSON blobs on the lecture
-            const updatePayload: any = {};
             if (aiDetectionInsights) {
-                updatePayload.ai_detection_insights = aiDetectionInsights;
-            }
-            if (insights) {
-                updatePayload.insights = insights;
-            }
-
-            if (Object.keys(updatePayload).length > 0) {
                 await supabase
                     .from("lectures")
-                    .update(updatePayload)
+                    .update({ ai_detection_insights: aiDetectionInsights })
                     .eq("id", lecture_id);
             }
         }
