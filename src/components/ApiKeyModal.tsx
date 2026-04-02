@@ -77,7 +77,11 @@ export default function ApiKeyModal({ onSaved }: ApiKeyModalProps) {
                         style={{ color: "#4f8ef7", textDecoration: "underline" }}>
                         Google AI Studio API key
                     </a>
-                    . It is stored securely and only used for your requests.
+                    . It is stored securely and only used for your requests.{" "}
+                    <a href="https://www.youtube.com/watch?v=4JoeUOpGZkQ" target="_blank" rel="noopener noreferrer"
+                        style={{ color: "#4f8ef7", textDecoration: "underline" }}>
+                        Tutorial
+                    </a>
                 </p>
 
                 {/* Input */}

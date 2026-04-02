@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, Users, TrendingUp, AlertCircle, Cpu, RefreshCw, Sparkles } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Lecture, Submission } from "./types";
@@ -25,6 +25,11 @@ export function SubmissionsView({
     const [insights, setInsights] = useState<any>(initialInsights);
     const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(initialLastGeneratedAt ?? null);
     const [generatingInsights, setGeneratingInsights] = useState(false);
+
+    useEffect(() => {
+        if (initialInsights !== undefined) setInsights(initialInsights);
+        if (initialLastGeneratedAt !== undefined) setLastGeneratedAt(initialLastGeneratedAt ?? null);
+    }, [initialInsights, initialLastGeneratedAt]);
 
     const handleGenerateInsights = async () => {
         setGeneratingInsights(true);
