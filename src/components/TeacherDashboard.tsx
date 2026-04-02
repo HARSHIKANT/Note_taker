@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { LogOut, ChevronLeft, BarChart2 } from "lucide-react";
+import { LogOut, ChevronLeft, BarChart2, BookMarked, Plus, Trash2, Loader2, BookOpen } from "lucide-react";
 import { Lecture, Submission } from "./dashboard/types";
 import { SubjectsView } from "./dashboard/SubjectsView";
 import { LecturesView } from "./dashboard/LecturesView";
@@ -13,7 +13,7 @@ import { HeadTeacherAnalyticsView } from "./dashboard/HeadTeacherAnalyticsView";
 import ApiKeyModal from "./ApiKeyModal";
 import type { ExtendedSession } from "@/lib/types";
 
-type View = "subjects" | "lectures" | "new-lecture" | "submissions" | "analytics";
+type View = "subjects" | "lectures" | "new-lecture" | "submissions" | "analytics" | "courses";
 
 export function TeacherDashboard() {
     const { data: session, update } = useSession();
@@ -23,6 +23,44 @@ export function TeacherDashboard() {
 
     const [view, setView] = useState<View>("subjects");
     const [selectedSubject, setSelectedSubject] = useState<string>("");
+    const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null); // null = subject mode
+
+    // Course Manager State (Head Teacher only)
+    const [courseList, setCourseList] = useState<{ id: string; name: string }[]>([]);
+    const [newCourseName, setNewCourseName] = useState("");
+    const [savingCourse, setSavingCourse] = useState(false);
+    const [coursesLoaded, setCoursesLoaded] = useState(false);
+
+    const fetchCourseList = async () => {
+        const r = await fetch("/api/courses");
+        const d = await r.json();
+        setCourseList(d.courses ?? []);
+        setCoursesLoaded(true);
+    };
+
+    const handleOpenCourses = () => {
+        setView("courses");
+        if (!coursesLoaded) fetchCourseList();
+    };
+
+    const handleCreateCourse = async () => {
+        if (!newCourseName.trim()) return;
+        setSavingCourse(true);
+        const res = await fetch("/api/courses", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: newCourseName.trim() }),
+        });
+        if (res.ok) { setNewCourseName(""); fetchCourseList(); }
+        else { const d = await res.json(); alert(d.error); }
+        setSavingCourse(false);
+    };
+
+    const handleDeleteCourse = async (id: string) => {
+        if (!confirm("Delete this course? Students enrolled will no longer see it.")) return;
+        await fetch(`/api/courses?id=${id}`, { method: "DELETE" });
+        fetchCourseList();
+    };
 
     // Lectures State
     const [lectures, setLectures] = useState<Lecture[]>([]);
@@ -36,10 +74,13 @@ export function TeacherDashboard() {
     const [insightsLastGeneratedAt, setInsightsLastGeneratedAt] = useState<string | null>(null);
     const [aiDetectionInsights, setAiDetectionInsights] = useState<any>(null);
 
-    const fetchLectures = async (subject: string) => {
+    const fetchLectures = async (subject: string, courseId?: string) => {
         setLoadingLectures(true);
         try {
-            const res = await fetch(`/api/lectures?subject=${subject}`);
+            const url = courseId
+                ? `/api/lectures?course_id=${courseId}`
+                : `/api/lectures?subject=${subject}`;
+            const res = await fetch(url);
             const data = await res.json();
             setLectures(data.lectures || []);
         } catch {
@@ -50,22 +91,33 @@ export function TeacherDashboard() {
 
     const openSubject = (subject: string) => {
         setSelectedSubject(subject);
+        setSelectedCourseId(null);
         setView("lectures");
         fetchLectures(subject);
     };
 
+    const openCourse = (course: { id: string; name: string }) => {
+        setSelectedSubject(course.name);
+        setSelectedCourseId(course.id);
+        setView("lectures");
+        fetchLectures(course.name, course.id);
+    };
+
     const saveLecture = async (
-        data: { title: string; targetClass: string; transcript: string },
+        data: { title: string; targetClass: string; transcript: string; courseId?: string },
         publish: boolean
     ) => {
         try {
+            // If currently in a course context, always use the selectedCourseId
+            const effectiveCourseId = selectedCourseId ?? data.courseId;
             const res = await fetch("/api/lectures", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     title: data.title,
-                    subject: selectedSubject,
-                    class: data.targetClass,
+                    subject: effectiveCourseId ? undefined : selectedSubject,
+                    class: effectiveCourseId ? undefined : data.targetClass,
+                    course_id: effectiveCourseId || undefined,
                     content: data.transcript,
                     audio_insights: null,
                 }),
@@ -96,7 +148,7 @@ export function TeacherDashboard() {
             }
 
             setView("lectures");
-            fetchLectures(selectedSubject);
+            fetchLectures(selectedSubject, selectedCourseId ?? undefined);
         } catch (err: any) {
             alert("Error: " + err.message);
         }
@@ -109,7 +161,7 @@ export function TeacherDashboard() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id: lecture.id, published: !lecture.published }),
             });
-            fetchLectures(selectedSubject);
+            fetchLectures(selectedSubject, selectedCourseId ?? undefined);
         } catch { }
     };
 
@@ -117,7 +169,7 @@ export function TeacherDashboard() {
         if (!confirm("Delete this lecture?")) return;
         try {
             await fetch(`/api/lectures?id=${id}`, { method: "DELETE" });
-            fetchLectures(selectedSubject);
+            fetchLectures(selectedSubject, selectedCourseId ?? undefined);
         } catch { }
     };
 
@@ -186,6 +238,19 @@ export function TeacherDashboard() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {/* Course Manager — Head Teacher only */}
+                        {isHeadTeacher && (
+                            <button
+                                onClick={handleOpenCourses}
+                                className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-colors text-sm font-medium ${view === "courses"
+                                    ? "bg-blue-500/20 text-blue-300"
+                                    : "hover:bg-blue-500/10 text-blue-500 hover:text-blue-400"
+                                    }`}
+                            >
+                                <BookMarked className="w-5 h-5" />
+                                <span className="hidden sm:inline">Courses</span>
+                            </button>
+                        )}
                         <button
                             onClick={() => setView(view === "analytics" ? "subjects" : "analytics")}
                             className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-colors text-sm font-medium ${view === "analytics"
@@ -209,7 +274,10 @@ export function TeacherDashboard() {
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10 space-y-6">
                 {view === "subjects" && (
-                    <SubjectsView onSelectSubject={openSubject} />
+                    <SubjectsView
+                        onSelectSubject={openSubject}
+                        onSelectCourse={openCourse}
+                    />
                 )}
 
                 {view === "lectures" && (
@@ -229,6 +297,7 @@ export function TeacherDashboard() {
                         selectedSubject={selectedSubject}
                         onSave={saveLecture}
                         geminiApiKey={extSession?.geminiApiKey ?? ""}
+                        isCourseMode={!!selectedCourseId}
                     />
                 )}
 
@@ -247,6 +316,61 @@ export function TeacherDashboard() {
                     isHeadTeacher
                         ? <HeadTeacherAnalyticsView myId={(session as any)?.userId ?? ""} />
                         : <TeacherAnalyticsView isHeadTeacher={false} />
+                )}
+
+                {/* Course Manager view — Head Teacher only */}
+                {view === "courses" && isHeadTeacher && (
+                    <div className="space-y-6">
+                        <div>
+                            <h2 className="text-2xl lg:text-3xl font-bold text-white">Course Manager</h2>
+                            <p className="text-sm text-neutral-400 mt-1">Create courses for students to enroll in at sign-up</p>
+                        </div>
+                        <div className="p-5 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-4">
+                            <div className="flex gap-3">
+                                <input
+                                    value={newCourseName}
+                                    onChange={(e) => setNewCourseName(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && handleCreateCourse()}
+                                    placeholder='e.g. "Web Development 101"'
+                                    className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                                />
+                                <button
+                                    onClick={handleCreateCourse}
+                                    disabled={savingCourse || !newCourseName.trim()}
+                                    className="flex items-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors"
+                                >
+                                    {savingCourse ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                    Create Course
+                                </button>
+                            </div>
+
+                            {courseList.length === 0 ? (
+                                <div className="text-center py-10 space-y-3">
+                                    <BookOpen className="w-10 h-10 text-neutral-600 mx-auto" />
+                                    <p className="text-neutral-400">No courses yet. Create your first one above.</p>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-2">
+                                    {courseList.map((course) => (
+                                        <div key={course.id} className="flex items-center justify-between p-4 rounded-xl bg-neutral-950 border border-neutral-800">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                                    <BookOpen className="w-4 h-4 text-blue-400" />
+                                                </div>
+                                                <span className="text-white font-medium">{course.name}</span>
+                                            </div>
+                                            <button
+                                                onClick={() => handleDeleteCourse(course.id)}
+                                                className="p-2 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 )}
             </div>
         </div>

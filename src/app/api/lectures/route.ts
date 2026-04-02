@@ -3,9 +3,10 @@ import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { ExtendedSession } from "@/lib/types";
 
-// GET /api/lectures?subject=Physics&class=10
-// - Teacher: returns ALL their lectures for that subject (optionally filtered by class)
-// - Student: returns only PUBLISHED lectures for their class + subject
+// GET /api/lectures?subject=Physics&class=10  (traditional)
+// GET /api/lectures?course_id=<uuid>           (new course-based flow)
+// - Teacher: returns ALL their lectures for that subject or course
+// - Student: returns only PUBLISHED lectures matching their class+subject or course
 export async function GET(req: NextRequest) {
     const session = (await auth()) as ExtendedSession | null;
     if (!session?.userId) {
@@ -15,9 +16,35 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const subject = searchParams.get("subject");
     const classFilter = searchParams.get("class");
+    const courseId = searchParams.get("course_id");
 
+    // — Course-based path —
+    if (courseId) {
+        if (session.role === "teacher") {
+            const { data, error } = await supabase
+                .from("lectures")
+                .select("*")
+                .eq("teacher_id", session.userId)
+                .eq("course_id", courseId)
+                .order("created_at", { ascending: false });
+            if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ lectures: data });
+        }
+
+        // Student — only published
+        const { data, error } = await supabase
+            .from("lectures")
+            .select("id, title, subject, class, course_id, published, created_at")
+            .eq("course_id", courseId)
+            .eq("published", true)
+            .order("created_at", { ascending: false });
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ lectures: data });
+    }
+
+    // — Traditional subject+class path —
     if (!subject) {
-        return NextResponse.json({ error: "Subject required" }, { status: 400 });
+        return NextResponse.json({ error: "subject or course_id required" }, { status: 400 });
     }
 
     if (session.role === "teacher") {
@@ -63,10 +90,15 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { title, subject, class: targetClass, content, recording_file_id, audio_insights } = body;
+    const { title, subject, class: targetClass, content, recording_file_id, audio_insights, course_id } = body;
 
-    if (!title || !subject || !targetClass || !content) {
-        return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    if (!title || !content) {
+        return NextResponse.json({ error: "Missing required fields: title, content" }, { status: 400 });
+    }
+
+    // Must have either class+subject OR course_id
+    if (!course_id && (!subject || !targetClass)) {
+        return NextResponse.json({ error: "Provide either class+subject or course_id" }, { status: 400 });
     }
 
     const { data, error } = await supabase
@@ -74,8 +106,9 @@ export async function POST(req: NextRequest) {
         .insert({
             teacher_id: session.userId,
             title,
-            subject,
-            class: targetClass,
+            subject: subject || null,
+            class: targetClass || null,
+            course_id: course_id || null,
             content,
             recording_file_id: recording_file_id || null,
             audio_insights: audio_insights || null,

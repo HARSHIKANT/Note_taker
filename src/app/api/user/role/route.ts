@@ -11,18 +11,28 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { role, class: userClass } = body;
+    const { role, class: userClass, enrolled_courses } = body;
 
     // Validate role
     if (!role || !["student", "teacher"].includes(role)) {
         return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
-    // Students must provide a class
+    // Students must provide EITHER a class OR enrolled courses — not both
     if (role === "student") {
-        if (!userClass || !CLASSES.includes(userClass)) {
+        const hasClass = userClass && CLASSES.includes(userClass);
+        const hasCourses = Array.isArray(enrolled_courses) && enrolled_courses.length > 0;
+
+        if (!hasClass && !hasCourses) {
             return NextResponse.json(
-                { error: "Invalid class. Must be 5-10" },
+                { error: "Please select a class or at least one course" },
+                { status: 400 }
+            );
+        }
+
+        if (hasClass && hasCourses) {
+            return NextResponse.json(
+                { error: "Cannot select both a class and courses" },
                 { status: 400 }
             );
         }
@@ -36,16 +46,19 @@ export async function POST(req: NextRequest) {
         .single();
 
     if (user?.role) {
-        return NextResponse.json(
-            { error: "Role already set" },
-            { status: 400 }
-        );
+        return NextResponse.json({ error: "Role already set" }, { status: 400 });
     }
 
-    // Update user
-    const updateData: { role: string; class?: string } = { role };
+    // Build update payload
+    const updateData: { role: string; class?: string | null; enrolled_courses?: string[] | null } = { role };
     if (role === "student") {
-        updateData.class = userClass;
+        if (userClass) {
+            updateData.class = userClass;
+            updateData.enrolled_courses = null;
+        } else {
+            updateData.class = null;
+            updateData.enrolled_courses = enrolled_courses;
+        }
     }
 
     const { error } = await supabase

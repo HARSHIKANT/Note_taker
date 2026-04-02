@@ -15,6 +15,7 @@ export interface ExtendedSession extends Session {
     class?: ClassValue | null;
     isHeadTeacher?: boolean;
     geminiApiKey?: string | null;
+    enrolledCourses?: string[] | null;  // array of course UUIDs, for course-based students
 }
 
 export interface ExtendedToken extends JWT {
@@ -27,4 +28,5 @@ export interface ExtendedToken extends JWT {
     class?: ClassValue | null;
     isHeadTeacher?: boolean;
     geminiApiKey?: string | null;
+    enrolledCourses?: string[] | null;
 }

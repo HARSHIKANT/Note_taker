@@ -110,7 +110,7 @@ export function HeadTeacherAnalyticsView({ myId }: { myId: string }) {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 bg-neutral-900 border border-neutral-800 rounded-xl p-1">
+            <div className="flex gap-1 bg-neutral-900 border border-neutral-800 rounded-xl p-1 flex-wrap">
                 {([
                     { key: "overview", label: "Overview", icon: <TrendingUp className="w-3.5 h-3.5" /> },
                     { key: "mine", label: "My Lectures", icon: <User className="w-3.5 h-3.5" /> },

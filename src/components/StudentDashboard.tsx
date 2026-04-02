@@ -16,7 +16,13 @@ const SUBJECT_ICONS: Record<string, any> = {
     Physics: Atom,
     Chemistry: FlaskConical,
     Math: Calculator,
+    default: BookOpen,
 };
+
+interface Course {
+    id: string;
+    name: string;
+}
 
 interface Lecture {
     id: string;
@@ -76,10 +82,32 @@ export function StudentDashboard() {
     // Selected feedback — tracks which upload row is expanded
     const [expandedUploadId, setExpandedUploadId] = useState<string | null>(null);
 
-    const fetchLectures = async (subject: string) => {
+    const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+    const [enrolledCourses, setEnrolledCourses] = useState<Course[]>([]);
+
+    const isClassStudent = !!extSession?.class;
+
+    // Fetch enrolled courses for course-based students
+    useEffect(() => {
+        const ids: string[] = (extSession as any)?.enrolledCourses ?? [];
+        if (!isClassStudent && ids.length > 0) {
+            fetch("/api/courses")
+                .then((r) => r.json())
+                .then((d) => {
+                    const all: Course[] = d.courses ?? [];
+                    setEnrolledCourses(all.filter((c) => ids.includes(c.id)));
+                })
+                .catch(() => { });
+        }
+    }, [isClassStudent, extSession]);
+
+    const fetchLectures = async (subject: string, courseId?: string) => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/lectures?subject=${subject}`);
+            const url = courseId
+                ? `/api/lectures?course_id=${courseId}`
+                : `/api/lectures?subject=${subject}`;
+            const res = await fetch(url);
             const data = await res.json();
             setLectures(data.lectures || []);
         } catch { setLectures([]); }
@@ -96,8 +124,16 @@ export function StudentDashboard() {
 
     const openSubject = (subject: string) => {
         setSelectedSubject(subject);
+        setSelectedCourseId(null);
         setView("lectures");
         fetchLectures(subject);
+    };
+
+    const openCourse = (course: Course) => {
+        setSelectedSubject(course.name);
+        setSelectedCourseId(course.id);
+        setView("lectures");
+        fetchLectures(course.name, course.id);
     };
 
     const openLectureUpload = (lecture: Lecture) => {
@@ -298,27 +334,59 @@ export function StudentDashboard() {
             </div>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10 space-y-6">
-                {/* SUBJECTS VIEW */}
+                {/* SUBJECTS/COURSES VIEW */}
                 {view === "subjects" && (
                     <>
-                        <h2 className="text-2xl lg:text-3xl font-bold text-white">My Subjects</h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {SUBJECTS.map((sub) => {
-                                const Icon = SUBJECT_ICONS[sub] || BookOpen;
-                                return (
-                                    <button
-                                        key={sub}
-                                        onClick={() => openSubject(sub)}
-                                        className="group p-6 lg:p-8 rounded-2xl bg-neutral-900 border border-neutral-800 hover:border-neutral-700 transition-all text-left hover:shadow-lg hover:shadow-purple-500/5"
-                                    >
-                                        <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-purple-500/10 flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
-                                            <Icon className="w-6 h-6 lg:w-7 lg:h-7 text-purple-400" />
-                                        </div>
-                                        <h3 className="text-lg lg:text-xl font-semibold text-white">{sub}</h3>
-                                    </button>
-                                );
-                            })}
-                        </div>
+                        {isClassStudent ? (
+                            // Classic: school student sees hardcoded subjects
+                            <>
+                                <h2 className="text-2xl lg:text-3xl font-bold text-white">My Subjects</h2>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                                    {SUBJECTS.map((sub) => {
+                                        const Icon = SUBJECT_ICONS[sub] || BookOpen;
+                                        return (
+                                            <button
+                                                key={sub}
+                                                onClick={() => openSubject(sub)}
+                                                className="group p-6 lg:p-8 rounded-2xl bg-neutral-900 border border-neutral-800 hover:border-neutral-700 transition-all text-left hover:shadow-lg hover:shadow-purple-500/5"
+                                            >
+                                                <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-purple-500/10 flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
+                                                    <Icon className="w-6 h-6 lg:w-7 lg:h-7 text-purple-400" />
+                                                </div>
+                                                <h3 className="text-lg lg:text-xl font-semibold text-white">{sub}</h3>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </>
+                        ) : (
+                            // Dynamic: course student sees enrolled courses
+                            <>
+                                <h2 className="text-2xl lg:text-3xl font-bold text-white">My Courses</h2>
+                                {enrolledCourses.length === 0 ? (
+                                    <div className="text-center py-16 space-y-3">
+                                        <BookOpen className="w-12 h-12 text-neutral-600 mx-auto" />
+                                        <p className="text-neutral-300 text-lg">No courses found</p>
+                                        <p className="text-sm text-neutral-500">Ask your Head Teacher to set up courses.</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {enrolledCourses.map((course) => (
+                                            <button
+                                                key={course.id}
+                                                onClick={() => openCourse(course)}
+                                                className="group p-6 lg:p-8 rounded-2xl bg-neutral-900 border border-neutral-800 hover:border-blue-800/50 transition-all text-left hover:shadow-lg hover:shadow-blue-500/5"
+                                            >
+                                                <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-blue-500/10 flex items-center justify-center mb-4 group-hover:bg-blue-500/20 transition-colors">
+                                                    <BookOpen className="w-6 h-6 lg:w-7 lg:h-7 text-blue-400" />
+                                                </div>
+                                                <h3 className="text-lg lg:text-xl font-semibold text-white">{course.name}</h3>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </>
                 )}
 

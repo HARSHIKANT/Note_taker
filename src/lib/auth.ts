@@ -43,7 +43,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 if (email) {
                     const { data: existingUser } = await supabase
                         .from("users")
-                        .select("id, role, class, is_head_teacher, gemini_api_key")
+                        .select("id, role, class, is_head_teacher, gemini_api_key, enrolled_courses")
                         .eq("email", email)
                         .single();
 
@@ -53,6 +53,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         extendedToken.class = existingUser.class;
                         extendedToken.isHeadTeacher = existingUser.is_head_teacher ?? false;
                         extendedToken.geminiApiKey = existingUser.gemini_api_key ?? null;
+                        extendedToken.enrolledCourses = existingUser.enrolled_courses ?? null;
                     } else {
                         const { data: newUser } = await supabase
                             .from("users")
@@ -74,7 +75,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             if ((trigger === "update" || !extendedToken.role || extendedToken.geminiApiKey === undefined) && extendedToken.email) {
                 const { data: user } = await supabase
                     .from("users")
-                    .select("id, role, class, is_head_teacher, gemini_api_key")
+                    .select("id, role, class, is_head_teacher, gemini_api_key, enrolled_courses")
                     .eq("email", extendedToken.email as string)
                     .single();
 
@@ -84,6 +85,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     extendedToken.class = user.class;
                     extendedToken.isHeadTeacher = user.is_head_teacher ?? false;
                     extendedToken.geminiApiKey = user.gemini_api_key ?? null;
+                    extendedToken.enrolledCourses = user.enrolled_courses ?? null;
                 }
             }
 
@@ -137,6 +139,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 class: t.class,
                 isHeadTeacher: t.isHeadTeacher ?? false,
                 geminiApiKey: t.geminiApiKey ?? null,
+                enrolledCourses: (t as any).enrolledCourses ?? null,
             };
         },
     },
