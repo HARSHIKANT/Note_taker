@@ -86,6 +86,7 @@ export function StudentDashboard() {
     const [enrolledCourses, setEnrolledCourses] = useState<Course[]>([]);
 
     const isClassStudent = !!extSession?.class;
+    const hasCourses = (extSession?.enrolledCourses?.length ?? 0) > 0;
 
     // Fetch enrolled courses for course-based students
     useEffect(() => {
@@ -322,7 +323,10 @@ export function StudentDashboard() {
                             </div>
                             <div>
                                 <p className="font-semibold text-white text-sm lg:text-base">{extSession?.user?.name}</p>
-                                <p className="text-xs lg:text-sm text-neutral-400">Class {extSession?.class} • Student</p>
+                                <p className="text-xs lg:text-sm text-neutral-400">
+                                    {extSession?.instituteName && <span className="text-purple-400">{extSession.instituteName} · </span>}
+                                    {extSession?.class ? `Class ${extSession.class} · ` : ""}Student
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -337,8 +341,8 @@ export function StudentDashboard() {
                 {/* SUBJECTS/COURSES VIEW */}
                 {view === "subjects" && (
                     <>
-                        {isClassStudent ? (
-                            // Classic: school student sees hardcoded subjects
+                        {isClassStudent && (
+                            // Class-based subjects
                             <>
                                 <h2 className="text-2xl lg:text-3xl font-bold text-white">My Subjects</h2>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -359,16 +363,14 @@ export function StudentDashboard() {
                                     })}
                                 </div>
                             </>
-                        ) : (
-                            // Dynamic: course student sees enrolled courses
+                        )}
+
+                        {hasCourses && (
+                            // Custom courses
                             <>
-                                <h2 className="text-2xl lg:text-3xl font-bold text-white">My Courses</h2>
+                                <h2 className="text-2xl lg:text-3xl font-bold text-white">{isClassStudent ? "My Custom Courses" : "My Courses"}</h2>
                                 {enrolledCourses.length === 0 ? (
-                                    <div className="text-center py-16 space-y-3">
-                                        <BookOpen className="w-12 h-12 text-neutral-600 mx-auto" />
-                                        <p className="text-neutral-300 text-lg">No courses found</p>
-                                        <p className="text-sm text-neutral-500">Ask your Head Teacher to set up courses.</p>
-                                    </div>
+                                    <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-neutral-500" /></div>
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                         {enrolledCourses.map((course) => (
@@ -386,6 +388,14 @@ export function StudentDashboard() {
                                     </div>
                                 )}
                             </>
+                        )}
+
+                        {!isClassStudent && !hasCourses && (
+                            <div className="text-center py-16 space-y-3">
+                                <BookOpen className="w-12 h-12 text-neutral-600 mx-auto" />
+                                <p className="text-neutral-300 text-lg">No curriculum set up</p>
+                                <p className="text-sm text-neutral-500">Ask your Head Teacher to add courses, or contact support.</p>
+                            </div>
                         )}
                     </>
                 )}

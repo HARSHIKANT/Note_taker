@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { LogOut, ChevronLeft, BarChart2, BookMarked, Plus, Trash2, Loader2, BookOpen } from "lucide-react";
+import { LogOut, ChevronLeft, BarChart2, BookMarked, Plus, Trash2, Loader2, BookOpen, Users } from "lucide-react";
 import { Lecture, Submission } from "./dashboard/types";
 import { SubjectsView } from "./dashboard/SubjectsView";
 import { LecturesView } from "./dashboard/LecturesView";
@@ -10,10 +10,11 @@ import { NewLectureView } from "./dashboard/NewLectureView";
 import { SubmissionsView } from "./dashboard/SubmissionsView";
 import { TeacherAnalyticsView } from "./dashboard/TeacherAnalyticsView";
 import { HeadTeacherAnalyticsView } from "./dashboard/HeadTeacherAnalyticsView";
+import { RosterManagement } from "./dashboard/RosterManagement";
 import ApiKeyModal from "./ApiKeyModal";
 import type { ExtendedSession } from "@/lib/types";
 
-type View = "subjects" | "lectures" | "new-lecture" | "submissions" | "analytics" | "courses";
+type View = "subjects" | "lectures" | "new-lecture" | "submissions" | "analytics" | "courses" | "roster";
 
 export function TeacherDashboard() {
     const { data: session, update } = useSession();
@@ -233,7 +234,12 @@ export function TeacherDashboard() {
                                         <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 border border-amber-400/30 px-1.5 py-0.5 rounded-full">HEAD</span>
                                     )}
                                 </p>
-                                <p className="text-xs lg:text-sm text-neutral-400">{isHeadTeacher ? "Head Teacher" : "Teacher"}</p>
+                                <p className="text-xs lg:text-sm text-neutral-400">
+                                    {(extSession as any)?.instituteName && (
+                                        <span className="text-amber-400/80">{(extSession as any).instituteName} · </span>
+                                    )}
+                                    {isHeadTeacher ? "Head Teacher" : "Teacher"}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -249,6 +255,19 @@ export function TeacherDashboard() {
                             >
                                 <BookMarked className="w-5 h-5" />
                                 <span className="hidden sm:inline">Courses</span>
+                            </button>
+                        )}
+                        {/* Roster Manager — Head Teacher only */}
+                        {isHeadTeacher && (
+                            <button
+                                onClick={() => setView("roster")}
+                                className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-colors text-sm font-medium ${view === "roster"
+                                    ? "bg-amber-500/20 text-amber-300"
+                                    : "hover:bg-amber-500/10 text-amber-600 hover:text-amber-400"
+                                    }`}
+                            >
+                                <Users className="w-5 h-5" />
+                                <span className="hidden sm:inline">Roster</span>
                             </button>
                         )}
                         <button
@@ -318,7 +337,6 @@ export function TeacherDashboard() {
                         : <TeacherAnalyticsView isHeadTeacher={false} />
                 )}
 
-                {/* Course Manager view — Head Teacher only */}
                 {view === "courses" && isHeadTeacher && (
                     <div className="space-y-6">
                         <div>
@@ -372,6 +390,9 @@ export function TeacherDashboard() {
                         </div>
                     </div>
                 )}
+
+                {/* Roster Manager — Head Teacher only */}
+                {view === "roster" && isHeadTeacher && <RosterManagement />}
             </div>
         </div>
     );

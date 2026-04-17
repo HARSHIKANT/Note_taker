@@ -3,18 +3,24 @@ import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { ExtendedSession } from "@/lib/types";
 
-// GET /api/courses — returns all available courses (accessible by anyone logged in)
+// GET /api/courses — returns all available courses for the current user's institute
 export async function GET() {
     const session = (await auth()) as ExtendedSession | null;
     if (!session?.userId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data, error } = await supabase
+    let query = supabase
         .from("courses")
         .select("id, name, created_at")
         .order("created_at", { ascending: true });
 
+    // Scope to institute if one is set
+    if (session.instituteId) {
+        query = query.eq("institute_id", session.instituteId);
+    }
+
+    const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ courses: data ?? [] });
 }
@@ -35,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabase
         .from("courses")
-        .insert({ name: name.trim(), created_by: session.userId })
+        .insert({ name: name.trim(), created_by: session.userId, institute_id: session.instituteId ?? null })
         .select("id, name, created_at")
         .single();
 

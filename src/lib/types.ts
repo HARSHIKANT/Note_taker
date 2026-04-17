@@ -15,7 +15,10 @@ export interface ExtendedSession extends Session {
     class?: ClassValue | null;
     isHeadTeacher?: boolean;
     geminiApiKey?: string | null;
-    enrolledCourses?: string[] | null;  // array of course UUIDs, for course-based students
+    enrolledCourses?: string[] | null;  // array of course UUIDs
+    instituteId?: string | null;
+    instituteName?: string | null;
+    assignedSubjects?: string[] | null; // for teachers: subjects they teach
 }
 
 export interface ExtendedToken extends JWT {
@@ -29,4 +32,7 @@ export interface ExtendedToken extends JWT {
     isHeadTeacher?: boolean;
     geminiApiKey?: string | null;
     enrolledCourses?: string[] | null;
+    instituteId?: string | null;
+    instituteName?: string | null;
+    assignedSubjects?: string[] | null;
 }

@@ -43,7 +43,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 if (email) {
                     const { data: existingUser } = await supabase
                         .from("users")
-                        .select("id, role, class, is_head_teacher, gemini_api_key, enrolled_courses")
+                        .select("id, role, class, is_head_teacher, gemini_api_key, enrolled_courses, institute_id, assigned_subjects, institutes(name)")
                         .eq("email", email)
                         .single();
 
@@ -54,17 +54,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         extendedToken.isHeadTeacher = existingUser.is_head_teacher ?? false;
                         extendedToken.geminiApiKey = existingUser.gemini_api_key ?? null;
                         extendedToken.enrolledCourses = existingUser.enrolled_courses ?? null;
+                        extendedToken.instituteId = existingUser.institute_id ?? null;
+                        extendedToken.instituteName = (existingUser.institutes as any)?.name ?? null;
+                        extendedToken.assignedSubjects = existingUser.assigned_subjects ?? null;
                     } else {
+                        // New user — check if they are pre-registered in any institute's roster
+                        const { data: rosterEntry } = await supabase
+                            .from("institute_members")
+                            .select("role, institute_id, institutes(name)")
+                            .eq("email", email)
+                            .single();
+
+                        const rosterRole = rosterEntry?.role ?? null;
+                        const rosterInstituteId = rosterEntry?.institute_id ?? null;
+                        const rosterInstituteName = (rosterEntry?.institutes as any)?.name ?? null;
+
                         const { data: newUser } = await supabase
                             .from("users")
-                            .insert({ email, name, avatar_url: avatar })
+                            .insert({
+                                email,
+                                name,
+                                avatar_url: avatar,
+                                role: rosterRole,
+                                institute_id: rosterInstituteId,
+                                is_head_teacher: rosterRole === "head_teacher",
+                            })
                             .select("id")
                             .single();
 
                         if (newUser) {
                             extendedToken.userId = newUser.id;
-                            extendedToken.role = null;
+                            extendedToken.role = rosterRole === "head_teacher" ? "teacher" : rosterRole;
                             extendedToken.class = null;
+                            extendedToken.isHeadTeacher = rosterRole === "head_teacher";
+                            extendedToken.instituteId = rosterInstituteId;
+                            extendedToken.instituteName = rosterInstituteName;
+                            extendedToken.assignedSubjects = null;
                         }
                     }
                 }
@@ -73,6 +98,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // 2) Re-fetch role from Supabase when session is updated, role is missing,
             //    or geminiApiKey has never been loaded (preexisting sessions)
             if ((trigger === "update" || !extendedToken.role || extendedToken.geminiApiKey === undefined) && extendedToken.email) {
+                // Step 1: Always-safe core query (these columns existed before migration)
                 const { data: user } = await supabase
                     .from("users")
                     .select("id, role, class, is_head_teacher, gemini_api_key, enrolled_courses")
@@ -86,6 +112,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     extendedToken.isHeadTeacher = user.is_head_teacher ?? false;
                     extendedToken.geminiApiKey = user.gemini_api_key ?? null;
                     extendedToken.enrolledCourses = user.enrolled_courses ?? null;
+
+                    // Step 2: Optional institute fields (only available after migration)
+                    try {
+                        const { data: extUser } = await supabase
+                            .from("users")
+                            .select("institute_id, assigned_subjects")
+                            .eq("id", user.id)
+                            .single();
+
+                        if (extUser) {
+                            extendedToken.instituteId = extUser.institute_id ?? null;
+                            extendedToken.assignedSubjects = extUser.assigned_subjects ?? null;
+
+                            // Step 3: Fetch institute name if we have an institute_id
+                            if (extUser.institute_id) {
+                                const { data: institute } = await supabase
+                                    .from("institutes")
+                                    .select("name")
+                                    .eq("id", extUser.institute_id)
+                                    .single();
+                                extendedToken.instituteName = institute?.name ?? null;
+                            }
+                        }
+                    } catch {
+                        // Migration hasn't been run yet — institute fields are unavailable, which is fine
+                        extendedToken.instituteId = null;
+                        extendedToken.instituteName = null;
+                        extendedToken.assignedSubjects = null;
+                    }
                 }
             }
 
@@ -139,7 +194,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 class: t.class,
                 isHeadTeacher: t.isHeadTeacher ?? false,
                 geminiApiKey: t.geminiApiKey ?? null,
-                enrolledCourses: (t as any).enrolledCourses ?? null,
+                enrolledCourses: t.enrolledCourses ?? null,
+                instituteId: t.instituteId ?? null,
+                instituteName: t.instituteName ?? null,
+                assignedSubjects: t.assignedSubjects ?? null,
             };
         },
     },

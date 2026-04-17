@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { BookOpen, Atom, FlaskConical, Calculator, BookMarked, Loader2 } from "lucide-react";
 import { SUBJECTS } from "@/lib/types";
+import { useSession } from "next-auth/react";
+import type { ExtendedSession } from "@/lib/types";
 
 const SUBJECT_ICONS: Record<string, any> = {
     Physics: Atom,
@@ -18,6 +20,13 @@ interface SubjectsViewProps {
 }
 
 export function SubjectsView({ onSelectSubject, onSelectCourse }: SubjectsViewProps) {
+    const { data: session } = useSession();
+    const extSession = session as unknown as ExtendedSession;
+    // Show all subjects if none are assigned yet (fallback), otherwise filter to assigned only
+    const visibleSubjects = extSession?.assignedSubjects?.length
+        ? SUBJECTS.filter((s) => extSession.assignedSubjects!.includes(s))
+        : [...SUBJECTS];
+
     const [courses, setCourses] = useState<Course[]>([]);
     const [loadingCourses, setLoadingCourses] = useState(true);
 
@@ -35,7 +44,7 @@ export function SubjectsView({ onSelectSubject, onSelectCourse }: SubjectsViewPr
             <div className="space-y-4">
                 <h2 className="text-2xl font-bold text-white">My Subjects</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {SUBJECTS.map((sub) => {
+                    {visibleSubjects.map((sub) => {
                         const Icon = SUBJECT_ICONS[sub] || BookOpen;
                         return (
                             <button

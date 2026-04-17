@@ -21,23 +21,27 @@ export async function GET(req: NextRequest) {
     // — Course-based path —
     if (courseId) {
         if (session.role === "teacher") {
-            const { data, error } = await supabase
+            let query = supabase
                 .from("lectures")
                 .select("*")
                 .eq("teacher_id", session.userId)
                 .eq("course_id", courseId)
                 .order("created_at", { ascending: false });
+            if (session.instituteId) query = query.eq("institute_id", session.instituteId);
+            const { data, error } = await query;
             if (error) return NextResponse.json({ error: error.message }, { status: 500 });
             return NextResponse.json({ lectures: data });
         }
 
         // Student — only published
-        const { data, error } = await supabase
+        let query = supabase
             .from("lectures")
             .select("id, title, subject, class, course_id, published, created_at")
             .eq("course_id", courseId)
             .eq("published", true)
             .order("created_at", { ascending: false });
+        if (session.instituteId) query = query.eq("institute_id", session.instituteId);
+        const { data, error } = await query;
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
         return NextResponse.json({ lectures: data });
     }
@@ -55,9 +59,8 @@ export async function GET(req: NextRequest) {
             .eq("subject", subject)
             .order("created_at", { ascending: false });
 
-        if (classFilter) {
-            query = query.eq("class", classFilter);
-        }
+        if (classFilter) query = query.eq("class", classFilter);
+        if (session.instituteId) query = query.eq("institute_id", session.instituteId);
 
         const { data, error } = await query;
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -70,13 +73,15 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Class not set" }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    let studentQuery = supabase
         .from("lectures")
         .select("id, title, subject, class, published, created_at")
         .eq("subject", subject)
         .eq("class", studentClass)
         .eq("published", true)
         .order("created_at", { ascending: false });
+    if (session.instituteId) studentQuery = studentQuery.eq("institute_id", session.instituteId);
+    const { data, error } = await studentQuery;
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ lectures: data });
@@ -113,6 +118,7 @@ export async function POST(req: NextRequest) {
             recording_file_id: recording_file_id || null,
             audio_insights: audio_insights || null,
             published: false,
+            institute_id: session.instituteId ?? null,
         })
         .select()
         .single();
