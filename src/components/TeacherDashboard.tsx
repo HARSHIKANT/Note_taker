@@ -35,6 +35,9 @@ export function TeacherDashboard() {
             .catch(() => { });
     }, []);
 
+    // Mobile menu state
+    const [menuOpen, setMenuOpen] = useState(false);
+
     // Course Manager State (Head Teacher only)
     const [courseList, setCourseList] = useState<{ id: string; name: string }[]>([]);
     const [newCourseName, setNewCourseName] = useState("");
@@ -252,50 +255,121 @@ export function TeacherDashboard() {
                             </div>
                         </div>
                     </div>
+                    {/* ── Right side: flat on sm+, hamburger on mobile ── */}
                     <div className="flex items-center gap-2">
-                        {/* Course Manager — Head Teacher only */}
-                        {isHeadTeacher && (
+
+                        {/* sm+ flat buttons */}
+                        <div className="hidden sm:flex items-center gap-2">
+                            {isHeadTeacher && (
+                                <button
+                                    onClick={() => { handleOpenCourses(); setMenuOpen(false); }}
+                                    className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-colors text-sm font-medium ${view === "courses"
+                                        ? "bg-blue-500/20 text-blue-300"
+                                        : "hover:bg-blue-500/10 text-blue-500 hover:text-blue-400"
+                                        }`}
+                                >
+                                    <BookMarked className="w-5 h-5" />
+                                    <span className="hidden lg:inline">Courses</span>
+                                </button>
+                            )}
+                            {isHeadTeacher && (
+                                <button
+                                    onClick={() => { setView("roster"); setMenuOpen(false); }}
+                                    className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-colors text-sm font-medium ${view === "roster"
+                                        ? "bg-amber-500/20 text-amber-300"
+                                        : "hover:bg-amber-500/10 text-amber-600 hover:text-amber-400"
+                                        }`}
+                                >
+                                    <Users className="w-5 h-5" />
+                                    <span className="hidden lg:inline">Roster</span>
+                                </button>
+                            )}
                             <button
-                                onClick={handleOpenCourses}
-                                className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-colors text-sm font-medium ${view === "courses"
-                                    ? "bg-blue-500/20 text-blue-300"
-                                    : "hover:bg-blue-500/10 text-blue-500 hover:text-blue-400"
+                                onClick={() => setView(view === "analytics" ? "subjects" : "analytics")}
+                                className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-colors text-sm font-medium ${view === "analytics"
+                                    ? isHeadTeacher ? "bg-amber-500/20 text-amber-400" : "bg-blue-600 text-white"
+                                    : isHeadTeacher ? "hover:bg-amber-500/10 text-amber-600 hover:text-amber-400" : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
                                     }`}
                             >
-                                <BookMarked className="w-5 h-5" />
-                                <span className="hidden sm:inline">Courses</span>
+                                <BarChart2 className="w-5 h-5" />
+                                <span className="hidden lg:inline">Analytics</span>
                             </button>
-                        )}
-                        {/* Roster Manager — Head Teacher only */}
-                        {isHeadTeacher && (
                             <button
-                                onClick={() => setView("roster")}
-                                className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-colors text-sm font-medium ${view === "roster"
-                                    ? "bg-amber-500/20 text-amber-300"
-                                    : "hover:bg-amber-500/10 text-amber-600 hover:text-amber-400"
-                                    }`}
+                                onClick={() => signOut()}
+                                className="flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg text-red-500 hover:bg-red-500/10 hover:text-red-400 transition-colors text-sm font-medium"
                             >
-                                <Users className="w-5 h-5" />
-                                <span className="hidden sm:inline">Roster</span>
+                                <LogOut className="w-5 h-5" />
+                                <span className="hidden lg:inline">Sign out</span>
                             </button>
+                        </div>
+
+                        {/* Mobile layout — only Head Teacher needs a hamburger (4 buttons); regular teachers have 2 which fit fine */}
+                        {isHeadTeacher ? (
+                            /* Head Teacher mobile: Sign out always visible + hamburger for Courses/Roster/Analytics */
+                            <div className="flex sm:hidden items-center gap-1">
+                                <button
+                                    onClick={() => signOut()}
+                                    className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
+                                    aria-label="Sign out"
+                                >
+                                    <LogOut className="w-5 h-5" />
+                                </button>
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setMenuOpen((o) => !o)}
+                                        className="p-2 rounded-lg text-neutral-400 hover:bg-neutral-800 hover:text-white transition-colors"
+                                        aria-label="Open menu"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            {menuOpen
+                                                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
+                                        </svg>
+                                    </button>
+                                    {menuOpen && (
+                                        <div className="absolute right-0 top-full mt-2 w-48 bg-neutral-900 border border-neutral-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                                            <button
+                                                onClick={() => { handleOpenCourses(); setMenuOpen(false); }}
+                                                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${view === "courses" ? "bg-blue-500/20 text-blue-300" : "text-blue-400 hover:bg-blue-500/10"}`}
+                                            >
+                                                <BookMarked className="w-4 h-4" /> Courses
+                                            </button>
+                                            <button
+                                                onClick={() => { setView("roster"); setMenuOpen(false); }}
+                                                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${view === "roster" ? "bg-amber-500/20 text-amber-300" : "text-amber-400 hover:bg-amber-500/10"}`}
+                                            >
+                                                <Users className="w-4 h-4" /> Roster
+                                            </button>
+                                            <button
+                                                onClick={() => { setView(view === "analytics" ? "subjects" : "analytics"); setMenuOpen(false); }}
+                                                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${view === "analytics" ? "bg-amber-500/20 text-amber-400" : "text-neutral-300 hover:bg-neutral-800"}`}
+                                            >
+                                                <BarChart2 className="w-4 h-4" /> Analytics
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            /* Regular teacher mobile: just Analytics + Sign Out icons — 2 buttons fit fine */
+                            <div className="flex sm:hidden items-center gap-1">
+                                <button
+                                    onClick={() => setView(view === "analytics" ? "subjects" : "analytics")}
+                                    className={`p-2 rounded-lg transition-colors ${view === "analytics" ? "bg-blue-600 text-white" : "text-neutral-400 hover:bg-neutral-800 hover:text-white"}`}
+                                    aria-label="Analytics"
+                                >
+                                    <BarChart2 className="w-5 h-5" />
+                                </button>
+                                <button
+                                    onClick={() => signOut()}
+                                    className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
+                                    aria-label="Sign out"
+                                >
+                                    <LogOut className="w-5 h-5" />
+                                </button>
+                            </div>
                         )}
-                        <button
-                            onClick={() => setView(view === "analytics" ? "subjects" : "analytics")}
-                            className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-colors text-sm font-medium ${view === "analytics"
-                                ? isHeadTeacher ? "bg-amber-500/20 text-amber-400" : "bg-blue-600 text-white"
-                                : isHeadTeacher ? "hover:bg-amber-500/10 text-amber-600 hover:text-amber-400" : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
-                                }`}
-                        >
-                            <BarChart2 className="w-5 h-5" />
-                            <span className="hidden sm:inline">Analytics</span>
-                        </button>
-                        <button
-                            onClick={() => signOut()}
-                            className="flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg text-red-500 hover:bg-red-500/10 hover:text-red-400 transition-colors text-sm font-medium"
-                        >
-                            <LogOut className="w-5 h-5" />
-                            <span className="hidden sm:inline">Sign out</span>
-                        </button>
+
                     </div>
                 </div>
             </div>
