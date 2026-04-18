@@ -20,7 +20,7 @@ const SUBJECT_ICONS: Record<string, any> = {
 };
 
 export default function RoleSelectPage() {
-    const { data: session } = useSession();
+    const { data: session, update } = useSession();
     const extSession = session as unknown as ExtendedSession;
     const router = useRouter();
 
@@ -76,7 +76,9 @@ export default function RoleSelectPage() {
             const data = await res.json();
             if (!res.ok) { setError(data.error || "Something went wrong"); setLoading(false); return; }
 
-            // page.tsx reads directly from DB now, so no need to update the JWT
+            // Refresh JWT so StudentDashboard reads the new class/subjects immediately
+            await update();
+            // page.tsx reads from DB, so the redirect loop cannot return
             router.push("/");
 
         } catch {

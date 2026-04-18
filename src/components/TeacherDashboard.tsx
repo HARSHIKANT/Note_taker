@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { LogOut, ChevronLeft, BarChart2, BookMarked, Plus, Trash2, Loader2, BookOpen, Users } from "lucide-react";
 import { Lecture, Submission } from "./dashboard/types";
@@ -24,7 +24,16 @@ export function TeacherDashboard() {
 
     const [view, setView] = useState<View>("subjects");
     const [selectedSubject, setSelectedSubject] = useState<string>("");
-    const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null); // null = subject mode
+    const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+
+    // Fetch teacher's assigned subjects from DB (bypasses stale JWT session)
+    const [dbAssignedSubjects, setDbAssignedSubjects] = useState<string[] | null>(null);
+    useEffect(() => {
+        fetch("/api/user/me")
+            .then((r) => r.json())
+            .then((d) => setDbAssignedSubjects(d.assignedSubjects ?? null))
+            .catch(() => { });
+    }, []);
 
     // Course Manager State (Head Teacher only)
     const [courseList, setCourseList] = useState<{ id: string; name: string }[]>([]);
@@ -296,6 +305,7 @@ export function TeacherDashboard() {
                     <SubjectsView
                         onSelectSubject={openSubject}
                         onSelectCourse={openCourse}
+                        allowedSubjects={dbAssignedSubjects}
                     />
                 )}
 

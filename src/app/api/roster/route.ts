@@ -118,6 +118,17 @@ export async function DELETE(req: NextRequest) {
 
     if (!id) return NextResponse.json({ error: "Member ID required" }, { status: 400 });
 
+    // 1) Fetch the member's email BEFORE deleting (needed for cascade revoke)
+    const { data: member } = await supabase
+        .from("institute_members")
+        .select("email, role")
+        .eq("id", id)
+        .eq("institute_id", session.instituteId)
+        .single();
+
+    if (!member) return NextResponse.json({ error: "Member not found" }, { status: 404 });
+
+    // 2) Delete from the roster
     const { error } = await supabase
         .from("institute_members")
         .delete()
@@ -125,5 +136,21 @@ export async function DELETE(req: NextRequest) {
         .eq("institute_id", session.instituteId);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // 3) REVOKE ACCESS: nullify the user's role and institute binding in the users table.
+    //    This means even if their JWT is still active, the next sign-in will see role=null
+    //    and auth.ts will route them to <UnregisteredScreen />.
+    await supabase
+        .from("users")
+        .update({
+            role: null,
+            institute_id: null,
+            is_head_teacher: false,
+            class: null,
+            enrolled_courses: null,
+            assigned_subjects: null,
+        })
+        .eq("email", member.email);
+
     return NextResponse.json({ success: true });
 }

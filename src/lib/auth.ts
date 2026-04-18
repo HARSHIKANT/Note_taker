@@ -41,33 +41,76 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 const avatar = (profile as any)?.picture || token.picture;
 
                 if (email) {
+                    // Safe core query (always-existing columns)
                     const { data: existingUser } = await supabase
                         .from("users")
-                        .select("id, role, class, is_head_teacher, gemini_api_key, enrolled_courses, institute_id, assigned_subjects, institutes(name)")
+                        .select("id, role, class, is_head_teacher, gemini_api_key, enrolled_courses")
                         .eq("email", email)
                         .single();
 
                     if (existingUser) {
-                        extendedToken.userId = existingUser.id;
-                        extendedToken.role = existingUser.role;
-                        extendedToken.class = existingUser.class;
-                        extendedToken.isHeadTeacher = existingUser.is_head_teacher ?? false;
-                        extendedToken.geminiApiKey = existingUser.gemini_api_key ?? null;
-                        extendedToken.enrolledCourses = existingUser.enrolled_courses ?? null;
-                        extendedToken.instituteId = existingUser.institute_id ?? null;
-                        extendedToken.instituteName = (existingUser.institutes as any)?.name ?? null;
-                        extendedToken.assignedSubjects = existingUser.assigned_subjects ?? null;
+                        // REVOCATION CHECK: if role is null, the user was removed from the roster
+                        // Leave token unset — page.tsx will show <UnregisteredScreen />
+                        if (existingUser.role) {
+                            extendedToken.userId = existingUser.id;
+                            extendedToken.role = existingUser.role as "student" | "teacher";
+                            extendedToken.class = existingUser.class;
+                            extendedToken.isHeadTeacher = existingUser.is_head_teacher ?? false;
+                            extendedToken.geminiApiKey = existingUser.gemini_api_key ?? null;
+                            extendedToken.enrolledCourses = existingUser.enrolled_courses ?? null;
+
+                            // Optional institute fields (only after migration)
+                            try {
+                                const { data: extUser } = await supabase
+                                    .from("users")
+                                    .select("institute_id, assigned_subjects")
+                                    .eq("id", existingUser.id)
+                                    .single();
+                                if (extUser) {
+                                    extendedToken.instituteId = extUser.institute_id ?? null;
+                                    extendedToken.assignedSubjects = extUser.assigned_subjects ?? null;
+                                    if (extUser.institute_id) {
+                                        const { data: inst } = await supabase
+                                            .from("institutes")
+                                            .select("name")
+                                            .eq("id", extUser.institute_id)
+                                            .single();
+                                        extendedToken.instituteName = inst?.name ?? null;
+                                    }
+                                }
+                            } catch {
+                                extendedToken.instituteId = null;
+                                extendedToken.instituteName = null;
+                                extendedToken.assignedSubjects = null;
+                            }
+                        }
                     } else {
                         // New user — check if they are pre-registered in any institute's roster
-                        const { data: rosterEntry } = await supabase
-                            .from("institute_members")
-                            .select("role, institute_id, institutes(name)")
-                            .eq("email", email)
-                            .single();
+                        let rosterRole: string | null = null;
+                        let rosterInstituteId: string | null = null;
+                        let rosterInstituteName: string | null = null;
 
-                        const rosterRole = rosterEntry?.role ?? null;
-                        const rosterInstituteId = rosterEntry?.institute_id ?? null;
-                        const rosterInstituteName = (rosterEntry?.institutes as any)?.name ?? null;
+                        try {
+                            const { data: rosterEntry } = await supabase
+                                .from("institute_members")
+                                .select("role, institute_id")
+                                .eq("email", email)
+                                .single();
+                            if (rosterEntry) {
+                                rosterRole = rosterEntry.role ?? null;
+                                rosterInstituteId = rosterEntry.institute_id ?? null;
+                                if (rosterInstituteId) {
+                                    const { data: inst } = await supabase
+                                        .from("institutes")
+                                        .select("name")
+                                        .eq("id", rosterInstituteId)
+                                        .single();
+                                    rosterInstituteName = inst?.name ?? null;
+                                }
+                            }
+                        } catch {
+                            // institute_members table doesn't exist yet
+                        }
 
                         const { data: newUser } = await supabase
                             .from("users")
@@ -84,7 +127,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                         if (newUser) {
                             extendedToken.userId = newUser.id;
-                            extendedToken.role = rosterRole === "head_teacher" ? "teacher" : rosterRole;
+                            extendedToken.role = (rosterRole === "head_teacher" ? "teacher" : rosterRole) as "student" | "teacher" | null;
                             extendedToken.class = null;
                             extendedToken.isHeadTeacher = rosterRole === "head_teacher";
                             extendedToken.instituteId = rosterInstituteId;

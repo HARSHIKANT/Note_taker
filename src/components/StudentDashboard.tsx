@@ -85,13 +85,32 @@ export function StudentDashboard() {
     const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
     const [enrolledCourses, setEnrolledCourses] = useState<Course[]>([]);
 
-    const isClassStudent = !!extSession?.class;
-    const hasCourses = (extSession?.enrolledCourses?.length ?? 0) > 0;
+    // Fetch fresh curriculum from DB (bypasses stale JWT session after role-select)
+    const [dbClass, setDbClass] = useState<string | null | undefined>(undefined); // undefined = loading
+    const [dbEnrolledCourseIds, setDbEnrolledCourseIds] = useState<string[]>([]);
+
+    useEffect(() => {
+        fetch("/api/user/me")
+            .then((r) => r.json())
+            .then((d) => {
+                setDbClass(d.class ?? null);
+                setDbEnrolledCourseIds(d.enrolledCourses ?? []);
+            })
+            .catch(() => { setDbClass(null); });
+    }, []);
+
+    // Use DB data when loaded, fall back to session while loading
+    const isClassStudent = dbClass !== undefined ? !!dbClass : !!extSession?.class;
+    const hasCourses = dbClass !== undefined
+        ? dbEnrolledCourseIds.length > 0
+        : (extSession?.enrolledCourses?.length ?? 0) > 0;
 
     // Fetch enrolled courses for course-based students
     useEffect(() => {
-        const ids: string[] = (extSession as any)?.enrolledCourses ?? [];
-        if (!isClassStudent && ids.length > 0) {
+        const ids: string[] = dbEnrolledCourseIds.length > 0
+            ? dbEnrolledCourseIds
+            : ((extSession as any)?.enrolledCourses ?? []);
+        if (ids.length > 0) {
             fetch("/api/courses")
                 .then((r) => r.json())
                 .then((d) => {
@@ -100,7 +119,7 @@ export function StudentDashboard() {
                 })
                 .catch(() => { });
         }
-    }, [isClassStudent, extSession]);
+    }, [dbEnrolledCourseIds]);
 
     const fetchLectures = async (subject: string, courseId?: string) => {
         setLoading(true);

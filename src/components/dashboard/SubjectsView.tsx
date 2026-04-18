@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { BookOpen, Atom, FlaskConical, Calculator, BookMarked, Loader2 } from "lucide-react";
 import { SUBJECTS } from "@/lib/types";
-import { useSession } from "next-auth/react";
-import type { ExtendedSession } from "@/lib/types";
 
 const SUBJECT_ICONS: Record<string, any> = {
     Physics: Atom,
@@ -17,14 +15,13 @@ interface Course { id: string; name: string; }
 interface SubjectsViewProps {
     onSelectSubject: (subject: string) => void;
     onSelectCourse: (course: Course) => void;
+    allowedSubjects?: string[] | null; // null/undefined = show all (fallback)
 }
 
-export function SubjectsView({ onSelectSubject, onSelectCourse }: SubjectsViewProps) {
-    const { data: session } = useSession();
-    const extSession = session as unknown as ExtendedSession;
-    // Show all subjects if none are assigned yet (fallback), otherwise filter to assigned only
-    const visibleSubjects = extSession?.assignedSubjects?.length
-        ? SUBJECTS.filter((s) => extSession.assignedSubjects!.includes(s))
+export function SubjectsView({ onSelectSubject, onSelectCourse, allowedSubjects }: SubjectsViewProps) {
+    // Filter to teacher's assigned subjects; show all as fallback if none set
+    const visibleSubjects = allowedSubjects != null && allowedSubjects.length > 0
+        ? SUBJECTS.filter((s) => allowedSubjects.includes(s))
         : [...SUBJECTS];
 
     const [courses, setCourses] = useState<Course[]>([]);
