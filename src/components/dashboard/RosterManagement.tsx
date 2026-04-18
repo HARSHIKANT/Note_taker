@@ -49,6 +49,7 @@ export function RosterManagement() {
     const [addError, setAddError] = useState("");
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editRole, setEditRole] = useState<"student" | "teacher" | "head_teacher">("student");
+    const [search, setSearch] = useState("");
 
     // ─── Bulk upload state ───────────────────────────────────────────────────────
     const [bulkRows, setBulkRows] = useState<BulkRow[] | null>(null);
@@ -316,11 +317,21 @@ export function RosterManagement() {
             </div>
 
             {/* ── Member list ── */}
-            <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wide flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    Current Members ({members.length})
-                </h3>
+            <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wide flex items-center gap-2">
+                        <Users className="w-4 h-4" />
+                        Current Members ({members.length})
+                    </h3>
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search by email…"
+                        id="roster-search-input"
+                        className="bg-neutral-950 border border-neutral-700 rounded-xl px-3 py-2 text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-purple-600 text-sm w-64"
+                    />
+                </div>
                 {loading ? (
                     <div className="flex justify-center py-10">
                         <Loader2 className="w-6 h-6 animate-spin text-neutral-500" />
@@ -330,9 +341,16 @@ export function RosterManagement() {
                         <Users className="w-10 h-10 text-neutral-700 mx-auto" />
                         <p className="text-neutral-500 text-sm">No members yet. Add your first one above.</p>
                     </div>
-                ) : (
-                    <div className="flex flex-col gap-2">
-                        {members.map((m) => (
+                ) : (() => {
+                    const filtered = members.filter((m) =>
+                        m.email.toLowerCase().includes(search.toLowerCase())
+                    );
+                    if (filtered.length === 0) return (
+                        <p className="text-neutral-500 text-sm text-center py-6">No members match &ldquo;{search}&rdquo;</p>
+                    );
+                    return (
+                        <div className="flex flex-col gap-2">
+                            {filtered.map((m) => (
                             <div
                                 key={m.id}
                                 className="flex items-center justify-between gap-3 p-4 rounded-xl bg-neutral-900 border border-neutral-800"
@@ -385,8 +403,9 @@ export function RosterManagement() {
                                 </div>
                             </div>
                         ))}
-                    </div>
-                )}
+                        </div>
+                    );
+                })()}
             </div>
         </div>
     );
