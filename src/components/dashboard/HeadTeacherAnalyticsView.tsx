@@ -46,6 +46,7 @@ export function HeadTeacherAnalyticsView({ myId }: { myId: string }) {
     const [allLectures, setAllLectures] = useState<LectureWithInsights[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<"overview" | "mine" | "all">("overview");
+    const [leaderboardMode, setLeaderboardMode] = useState<"content" | "interaction">("content");
 
     useEffect(() => {
         fetch("/api/analytics/teachers")
@@ -78,6 +79,7 @@ export function HeadTeacherAnalyticsView({ myId }: { myId: string }) {
     const myAvgContent = avgContent(myLectures);
     const totalFlags = allLectures.filter((l) => l.audio_insights.abusive_language_detected).length;
     const overallAvg = avg(allLectures.map((l) => l.audio_insights.student_interaction_percentage));
+    const overallAvgContent = avgContent(allLectures);
 
     if (loading) {
         return <div className="flex items-center justify-center py-24"><Loader2 className="w-6 h-6 animate-spin text-amber-400" /></div>;
@@ -97,8 +99,13 @@ export function HeadTeacherAnalyticsView({ myId }: { myId: string }) {
                         <p className="text-xs text-amber-400/80">School-wide performance overview</p>
                     </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3 mt-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
                     <StatCard label="Total Lectures" value={allLectures.length} color="text-white" />
+                    <StatCard
+                        label="School Avg Content Quality"
+                        value={overallAvgContent !== null ? `${overallAvgContent}/100` : "--/100"}
+                        color={overallAvgContent !== null && overallAvgContent >= 70 ? "text-green-400" : overallAvgContent !== null && overallAvgContent >= 50 ? "text-yellow-400" : "text-red-400"}
+                    />
                     <StatCard label="School Avg Interaction" value={`${overallAvg}%`} color="text-blue-400" />
                     <StatCard
                         label="Safety Flags"
@@ -130,69 +137,130 @@ export function HeadTeacherAnalyticsView({ myId }: { myId: string }) {
             </div>
 
             {/* Overview */}
-            {activeTab === "overview" && (
-                <div className="space-y-3">
-                    <p className="text-xs font-semibold text-neutral-500 uppercase tracking-widest">Teacher Leaderboard (by Content Quality)</p>
-                    {/* My rank card */}
-                    <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-4 space-y-2">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <BarChart2 className="w-4 h-4 text-amber-400" />
-                                <span className="text-sm font-semibold text-amber-200">You (Head Teacher)</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                {myAvgContent !== null && (
-                                    <div className="flex flex-col items-end gap-0.5">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Content Quality</span>
-                                        <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${myAvgContent >= 70 ? "bg-green-500/10 text-green-400" : myAvgContent >= 50 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400"}`}>
-                                            {myAvgContent}/100
-                                        </span>
-                                    </div>
-                                )}
-                                {myFlagCount > 0 && (
-                                    <span className="text-xs text-red-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{myFlagCount}</span>
-                                )}
-                                <div className="flex flex-col items-end gap-0.5">
-                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Student Interaction</span>
-                                    <span className="text-sm font-bold text-blue-400">{myAvgInteraction}%</span>
-                                </div>
-                            </div>
-                        </div>
-                        <InteractionBar value={myAvgContent ?? 0} color="bg-amber-500" />
-                        <p className="text-xs text-neutral-500">{myLectures.length} lecture{myLectures.length !== 1 ? "s" : ""} analysed</p>
-                    </div>
+            {activeTab === "overview" && (() => {
+                // Build unified ranked list (Head Teacher + other teachers) sorted by active mode
+                const myEntry = {
+                    id: myId,
+                    name: "You (Head Teacher)",
+                    isMe: true,
+                    avgContent: myAvgContent,
+                    avgInteraction: myAvgInteraction,
+                    flagCount: myFlagCount,
+                    lectureCount: myLectures.length,
+                };
+                const allEntries = [
+                    myEntry,
+                    ...teacherStats.map((t) => ({
+                        id: t.id,
+                        name: t.name,
+                        isMe: false,
+                        avgContent: t.avgContent,
+                        avgInteraction: t.avgInteraction,
+                        flagCount: t.flagCount,
+                        lectureCount: t.lectures.length,
+                    })),
+                ].sort((a, b) =>
+                    leaderboardMode === "content"
+                        ? (b.avgContent ?? 0) - (a.avgContent ?? 0)
+                        : b.avgInteraction - a.avgInteraction
+                );
 
-                    {teacherStats.map((t) => (
-                        <div key={t.id} className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 space-y-2">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-semibold text-white">{t.name}</p>
-                                    <p className="text-xs text-neutral-500">{t.email}</p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    {t.avgContent !== null && (
-                                        <div className="flex flex-col items-end gap-0.5">
-                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Content Quality</span>
-                                            <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${t.avgContent >= 70 ? "bg-green-500/10 text-green-400" : t.avgContent >= 50 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400"}`}>
-                                                {t.avgContent}/100
-                                            </span>
-                                        </div>
-                                    )}
-                                    {t.flagCount > 0 && (
-                                        <span className="text-xs text-red-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{t.flagCount}</span>
-                                    )}
-                                    <div className="flex flex-col items-end gap-0.5">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Student Interaction</span>
-                                        <span className="text-sm font-bold text-blue-400">{t.avgInteraction}%</span>
-                                    </div>
-                                </div>
+                const RANK_STYLES: Record<number, { badge: string; border: string; bg: string; label: string }> = {
+                    1: { badge: "bg-amber-400 text-neutral-900", border: "border-amber-500/50", bg: "bg-amber-950/20", label: "🥇" },
+                    2: { badge: "bg-neutral-300 text-neutral-900", border: "border-neutral-400/30", bg: "bg-neutral-800/40", label: "🥈" },
+                    3: { badge: "bg-orange-700 text-white", border: "border-orange-700/40", bg: "bg-orange-950/20", label: "🥉" },
+                };
+
+                return (
+                    <div className="space-y-3">
+                        {/* Header row: title + toggle */}
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                            <p className="text-xs font-semibold text-neutral-500 uppercase tracking-widest">
+                                Teacher Leaderboard
+                            </p>
+                            {/* Toggle */}
+                            <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 rounded-lg p-0.5">
+                                <button
+                                    onClick={() => setLeaderboardMode("content")}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${leaderboardMode === "content"
+                                        ? "bg-green-500/15 border border-green-600/30 text-green-300"
+                                        : "text-neutral-500 hover:text-neutral-300"}`}
+                                >
+                                    <BookOpen className="w-3 h-3" /> Content Quality
+                                </button>
+                                <button
+                                    onClick={() => setLeaderboardMode("interaction")}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${leaderboardMode === "interaction"
+                                        ? "bg-blue-500/15 border border-blue-600/30 text-blue-300"
+                                        : "text-neutral-500 hover:text-neutral-300"}`}
+                                >
+                                    <Users className="w-3 h-3" /> Interaction
+                                </button>
                             </div>
-                            <InteractionBar value={t.avgContent ?? 0} color="bg-green-500" />
-                            <p className="text-xs text-neutral-500">{t.lectures.length} lecture{t.lectures.length !== 1 ? "s" : ""} analysed</p>
                         </div>
-                    ))}
-                </div>
-            )}
+
+                        {/* Ranked cards */}
+                        {allEntries.map((t, idx) => {
+                            const rank = idx + 1;
+                            const rs = RANK_STYLES[rank];
+                            const barValue = leaderboardMode === "content" ? (t.avgContent ?? 0) : t.avgInteraction;
+                            const barColor = leaderboardMode === "content"
+                                ? (t.avgContent ?? 0) >= 70 ? "bg-green-500" : (t.avgContent ?? 0) >= 50 ? "bg-yellow-500" : "bg-red-500"
+                                : "bg-blue-500";
+
+                            return (
+                                <div
+                                    key={t.id}
+                                    className={`rounded-xl border p-4 space-y-2 transition-all ${rs ? rs.border + " " + rs.bg : "border-neutral-800 bg-neutral-900"}`}
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            {/* Rank badge */}
+                                            {rs ? (
+                                                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-extrabold shrink-0 ${rs.badge}`}>
+                                                    {rank}
+                                                </span>
+                                            ) : (
+                                                <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-neutral-500 bg-neutral-800 shrink-0">
+                                                    {rank}
+                                                </span>
+                                            )}
+                                            <div className="min-w-0">
+                                                <p className={`text-sm font-semibold truncate ${t.isMe ? "text-amber-200" : "text-white"}`}>
+                                                    {t.name}
+                                                </p>
+                                                {rank <= 3 && (
+                                                    <p className="text-[10px] text-neutral-500">{rs.label} Rank #{rank}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            {/* Content Quality stat */}
+                                            <div className="flex flex-col items-end gap-0.5">
+                                                <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Content Quality</span>
+                                                <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${(t.avgContent ?? 0) >= 70 ? "bg-green-500/10 text-green-400" : (t.avgContent ?? 0) >= 50 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400"}`}>
+                                                    {t.avgContent !== null ? `${t.avgContent}/100` : "--"}
+                                                </span>
+                                            </div>
+                                            {/* Interaction stat */}
+                                            <div className="flex flex-col items-end gap-0.5">
+                                                <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Interaction</span>
+                                                <span className="text-sm font-bold text-blue-400">{t.avgInteraction}%</span>
+                                            </div>
+                                            {t.flagCount > 0 && (
+                                                <span className="text-xs text-red-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{t.flagCount}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <InteractionBar value={barValue} color={barColor} />
+                                    <p className="text-xs text-neutral-500">{t.lectureCount} lecture{t.lectureCount !== 1 ? "s" : ""} analysed</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
+
 
             {/* My Lectures */}
             {activeTab === "mine" && (
@@ -319,14 +387,12 @@ function LectureCard({ lecture }: { lecture: LectureWithInsights }) {
                         <p className="text-xs text-neutral-500">{lecture.subject} · Class {lecture.class} · {new Date(lecture.created_at).toLocaleDateString()}</p>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
-                        {cq && (
-                            <span className={`flex flex-col items-end gap-0.5`}>
-                                <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-500">Content Quality</span>
-                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg ${cq.overall_score >= 70 ? "bg-green-500/10 text-green-400" : cq.overall_score >= 50 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400"}`}>
-                                    {cq.overall_score}/100
-                                </span>
+                        <span className={`flex flex-col items-end gap-0.5`}>
+                            <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-500">Student Interaction</span>
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg text-blue-400 bg-blue-500/10`}>
+                                {ins.student_interaction_percentage}%
                             </span>
-                        )}
+                        </span>
                         {toneWarning && (
                             <span className="flex items-center gap-1 text-[11px] font-semibold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-full">
                                 <MessageSquareWarning className="w-3 h-3" /> Tone
@@ -342,13 +408,18 @@ function LectureCard({ lecture }: { lecture: LectureWithInsights }) {
 
                 {/* Basic metrics */}
                 <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-neutral-800 rounded-lg p-2.5 space-y-1">
-                        <p className="text-[11px] text-neutral-400 flex items-center gap-1"><Users className="w-3 h-3" /> Student Interaction</p>
-                        <p className="text-lg font-bold text-blue-400">{ins.student_interaction_percentage}%
-                            <span className="text-[10px] font-normal text-neutral-500 ml-1">of class time</span>
-                        </p>
-                        <InteractionBar value={ins.student_interaction_percentage} color="bg-blue-500" />
-                    </div>
+                    {cq ? (
+                        <div className="bg-neutral-800 rounded-lg p-2.5 space-y-1">
+                            <p className="text-[11px] text-neutral-400 flex items-center gap-1"><BookOpen className="w-3 h-3" /> Content Quality</p>
+                            <p className="text-lg font-bold text-white">{cq.overall_score}/100</p>
+                            <ScoreBar score={cq.overall_score} max={100} />
+                        </div>
+                    ) : (
+                        <div className="bg-neutral-800 rounded-lg p-2.5 space-y-1">
+                            <p className="text-[11px] text-neutral-400 flex items-center gap-1"><BookOpen className="w-3 h-3" /> Content Quality</p>
+                            <p className="text-lg font-bold text-neutral-500">--/100</p>
+                        </div>
+                    )}
                     <div className="bg-neutral-800 rounded-lg p-2.5 space-y-1">
                         <p className="text-[11px] text-neutral-400 flex items-center gap-1"><Activity className="w-3 h-3" /> Class Tone</p>
                         <p className="text-sm font-semibold text-white leading-tight">{ins.class_tone}</p>
