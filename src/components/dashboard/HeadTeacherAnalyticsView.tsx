@@ -71,7 +71,7 @@ export function HeadTeacherAnalyticsView({ myId }: { myId: string }) {
         avgInteraction: avg(g.lectures.map((l) => l.audio_insights.student_interaction_percentage)),
         avgContent: avgContent(g.lectures),
         flagCount: g.lectures.filter((l) => l.audio_insights.abusive_language_detected).length,
-    })).sort((a, b) => b.avgInteraction - a.avgInteraction);
+    })).sort((a, b) => (b.avgContent ?? 0) - (a.avgContent ?? 0));
 
     const myAvgInteraction = avg(myLectures.map((l) => l.audio_insights.student_interaction_percentage));
     const myFlagCount = myLectures.filter((l) => l.audio_insights.abusive_language_detected).length;
@@ -132,7 +132,7 @@ export function HeadTeacherAnalyticsView({ myId }: { myId: string }) {
             {/* Overview */}
             {activeTab === "overview" && (
                 <div className="space-y-3">
-                    <p className="text-xs font-semibold text-neutral-500 uppercase tracking-widest">Teacher Leaderboard (by interaction %)</p>
+                    <p className="text-xs font-semibold text-neutral-500 uppercase tracking-widest">Teacher Leaderboard (by Content Quality)</p>
                     {/* My rank card */}
                     <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-4 space-y-2">
                         <div className="flex items-center justify-between">
@@ -158,7 +158,7 @@ export function HeadTeacherAnalyticsView({ myId }: { myId: string }) {
                                 </div>
                             </div>
                         </div>
-                        <InteractionBar value={myAvgInteraction} color="bg-amber-500" />
+                        <InteractionBar value={myAvgContent ?? 0} color="bg-amber-500" />
                         <p className="text-xs text-neutral-500">{myLectures.length} lecture{myLectures.length !== 1 ? "s" : ""} analysed</p>
                     </div>
 
@@ -187,7 +187,7 @@ export function HeadTeacherAnalyticsView({ myId }: { myId: string }) {
                                     </div>
                                 </div>
                             </div>
-                            <InteractionBar value={t.avgInteraction} color="bg-blue-500" />
+                            <InteractionBar value={t.avgContent ?? 0} color="bg-green-500" />
                             <p className="text-xs text-neutral-500">{t.lectures.length} lecture{t.lectures.length !== 1 ? "s" : ""} analysed</p>
                         </div>
                     ))}
