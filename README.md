@@ -61,13 +61,13 @@ Up to 3 rounds with 0s / 20s / 40s waits before the final error is raised.
 ### Pipeline 1 — Student Notes Grading
 ```
 Student uploads photos
-  → Images uploaded to Google Drive (Notes/Subject/Topic/)
-  → Supabase record created (status: pending)
-  → All images sent to Gemini in ONE request → OCR extraction
-  → Same model call: compares notes vs. lecture transcript
-  → AI Detection forensic analysis (AI vs human probability)
-  → Score (0–100%) + feedback JSON saved to uploads table
-  → Teacher views aggregated missing concepts (separate API call)
+  → Images uploaded to Google Drive (Notes/Subject/LectureTitle/) via /api/bulk-upload
+  → Supabase uploads record created (ocr_status: pending, status: pending)
+  → Gemini Call 1 — ocrImageFromDrive(): all images in ONE request → OCR text extraction
+  → Gemini Call 2 — compareNotesWithLecture(): compares OCR text vs. lecture transcript
+      + AI Detection forensic analysis (aiProbability, humanProbability, explanation)
+  → Score (0–100%), ai_feedback, ai_probability, human_probability, ai_explanation saved to uploads
+  → Teacher views aggregated missing concepts (POST /api/lectures/generate-insights on demand)
 ```
 
 ### Pipeline 2 — Lecture Content Audit
@@ -90,7 +90,7 @@ Teacher creates lecture
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16.1.6 (App Router) |
 | Auth | NextAuth.js v5 (Google OAuth) |
 | Database | Supabase (PostgreSQL) |
 | File Storage | Supabase Storage (recordings), Google Drive API (notes) |
@@ -99,6 +99,7 @@ Teacher creates lecture
 | Image Processing | Sharp |
 | CSV Parsing | PapaParse |
 | Charts | Recharts |
+| Analytics | Vercel Analytics |
 
 ---
 
@@ -107,13 +108,26 @@ Teacher creates lecture
 ### `users`
 ```sql
 CREATE TABLE users (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  email            TEXT UNIQUE NOT NULL,
+  name             TEXT,
+  role             TEXT CHECK (role IN ('student', 'teacher')), -- head_teachers have role='teacher' and is_head_teacher=true
+  class            TEXT,                    -- '5'–'10', students enrolled in a class
+  institute_id     TEXT,                    -- links user to an institute roster
+  is_head_teacher  BOOLEAN DEFAULT FALSE,   -- indicates if the user is a head teacher
+  avatar_url       TEXT,                    -- profile picture from Google
+  assigned_subjects TEXT[],                 -- subjects assigned to a teacher
+  enrolled_courses TEXT[],                  -- custom courses a student is enrolled in
+  gemini_api_key   TEXT,                    -- per-teacher Gemini API key (encrypted at rest)
+  created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### `institutes`
+```sql
+CREATE TABLE institutes (
   id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  email         TEXT UNIQUE NOT NULL,
-  name          TEXT,
-  role          TEXT CHECK (role IN ('student', 'teacher', 'head_teacher')),
-  class         TEXT,                    -- '5'–'10', students enrolled in a class
-  institute_id  TEXT,                    -- links user to an institute roster
-  gemini_api_key TEXT,                   -- per-teacher Gemini API key (encrypted at rest)
+  name          TEXT NOT NULL,
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 ```
@@ -133,19 +147,15 @@ CREATE TABLE institute_members (
 
 ### `courses`
 ```sql
+-- Simple named course entities, scoped to an institute.
+-- Enrollment is tracked via users.enrolled_courses (UUID[]) and users.assigned_subjects.
+-- There is no separate course_members junction table.
 CREATE TABLE courses (
   id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  created_by    UUID REFERENCES users(id),
-  custom_name   TEXT NOT NULL,
-  target_class  TEXT NOT NULL,
-  subject       TEXT NOT NULL,
+  name          TEXT NOT NULL,              -- e.g. "Advanced Physics Batch A"
+  institute_id  TEXT,                       -- scoped to a specific institute
+  created_by    UUID REFERENCES users(id),  -- head teacher who created it
   created_at    TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE course_members (
-  course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
-  user_id   UUID REFERENCES users(id)   ON DELETE CASCADE,
-  PRIMARY KEY (course_id, user_id)
 );
 ```
 
@@ -154,13 +164,16 @@ CREATE TABLE course_members (
 CREATE TABLE lectures (
   id                        UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   teacher_id                UUID REFERENCES users(id),
+  institute_id              TEXT,                           -- links to the institute
   course_id                 UUID REFERENCES courses(id),    -- NULL for standard class lectures
   title                     TEXT NOT NULL,
-  subject                   TEXT NOT NULL,
-  class                     TEXT NOT NULL,
+  subject                   TEXT,                           -- NULL for course-based lectures
+  class                     TEXT,                           -- NULL for course-based lectures
   content                   TEXT NOT NULL,                  -- transcript (hidden from students)
+  recording_file_id         TEXT,                           -- ID of the uploaded recording file
   published                 BOOLEAN DEFAULT FALSE,
   audio_insights            JSONB,                          -- AI lecture audit results (see below)
+  ai_detection_insights     JSONB,                          -- aggregated AI-detection metrics for the class
   insights                  JSONB,                          -- aggregated class-wide missing topics
   insights_last_generated_at TIMESTAMPTZ,
   created_at                TIMESTAMPTZ DEFAULT NOW()
@@ -191,20 +204,26 @@ CREATE TABLE lectures (
 }
 ```
 
+> **Note:** `content_quality` and `tone_analysis` may be `null` if the AI analysis step fails (e.g. JSON parse error after Gemini response). Always check for null before rendering these fields.
+
 ### `uploads`
 ```sql
 CREATE TABLE uploads (
-  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  student_id    UUID REFERENCES users(id),
-  student_email TEXT,
-  lecture_id    UUID REFERENCES lectures(id),
-  subject       TEXT,
-  file_id       TEXT,          -- JSON array of Google Drive file IDs
-  ocr_text      TEXT,
-  match_score   REAL,          -- 0–100
-  ai_feedback   TEXT,          -- JSON: { score, feedback, covered[], missing[], aiProbability, humanProbability, explanation }
-  ocr_status    TEXT DEFAULT 'pending',   -- 'pending' | 'completed' | 'error'
-  created_at    TIMESTAMPTZ DEFAULT NOW()
+  id                UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  student_id        UUID REFERENCES users(id),
+  student_email     TEXT,
+  lecture_id        UUID REFERENCES lectures(id),
+  subject           TEXT,
+  file_id           TEXT,          -- JSON array of Google Drive file IDs
+  ocr_text          TEXT,
+  match_score       REAL,          -- 0–100
+  ai_feedback       TEXT,          -- JSON: { score, feedback, covered[], missing[] }
+  ai_probability    REAL,          -- 0-100 probability that the notes are AI generated
+  human_probability REAL,          -- 0-100 probability that the notes are human generated
+  ai_explanation    TEXT,          -- reasoning for the AI vs Human probability
+  status            TEXT DEFAULT 'pending',    -- legacy status field (written by /api/upload single-file route)
+  ocr_status        TEXT DEFAULT 'pending',   -- 'pending' | 'processing' | 'completed' | 'failed'
+  created_at        TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
@@ -215,19 +234,20 @@ CREATE TABLE uploads (
 ```
 src/
 ├── app/
-│   ├── page.tsx                             # Root router by role
-│   ├── role-select/page.tsx                 # Onboarding: pick role + class
+│   ├── page.tsx                             # Root router by role — renders LandingHero / StudentDashboard / TeacherDashboard
+│   ├── role-select/page.tsx                 # Onboarding: pick class, subjects, and/or custom courses
+│   ├── register-institute/page.tsx          # Standalone institute creation page (sets creator as Head Teacher)
 │   └── api/
 │       ├── analytics/teachers/              # GET school-wide lecture analytics (Head Teacher)
 │       ├── auth/[...nextauth]/              # NextAuth Google OAuth handler
-│       ├── bulk-upload/                     # Upload files to Google Drive
+│       ├── bulk-upload/                     # Primary multi-file upload → Google Drive (lecture-linked; creates Notes/Subject/LectureTitle/ folder hierarchy)
 │       ├── courses/                         # CRUD for hybrid courses
 │       ├── institutes/                      # Institute registration & lookup
 │       ├── lectures/
 │       │   ├── route.ts                     # GET/POST/PATCH/DELETE lectures
 │       │   ├── analyze-text/               # Run AI audit on a text transcript
 │       │   ├── generate-insights/          # Aggregate class-wide missed topics
-│       │   ├── transcribe/                 # Upload audio to Gemini File Manager
+│       │   ├── transcribe/                 # POST: upload recording to Gemini File Manager; DELETE: cleanup from Supabase + Gemini after all chunks transcribed
 │       │   └── upload-audio/               # Generate Supabase Storage pre-signed URL
 │       ├── ocr/                             # Multi-image OCR + AI grading endpoint
 │       ├── roster/
@@ -236,8 +256,8 @@ src/
 │       ├── student-uploads/                 # Student: fetch own submissions
 │       ├── submissions/
 │       │   ├── route.ts                     # Teacher: view all student submissions
-│       │   └── insights/                    # Re-generate class insights on demand
-│       ├── upload/                          # Initiate Google Drive upload session
+│       │   └── insights/                    # GET: fetch pre-computed insights (use /api/lectures/generate-insights to re-run)
+│       ├── upload/                          # Legacy single-file upload to Google Drive (2-level folder: Notes/Subject/)
 │       └── user/
 │           ├── me/                          # Get current user profile
 │           ├── role/                        # Set role + class on first sign-in
@@ -256,12 +276,13 @@ src/
 │       ├── SubmissionsView.tsx              # Student submissions + class insights (Recharts)
 │       ├── TeacherAnalyticsView.tsx         # Personal teacher analytics (per-lecture breakdown)
 │       ├── HeadTeacherAnalyticsView.tsx     # School-wide analytics + leaderboard
-│       └── RosterManagement.tsx             # Bulk/manual roster upload, member management
+│       ├── RosterManagement.tsx             # Bulk/manual roster upload, member management
+│       └── types.ts                         # Local types for dashboard components (AudioInsights, LectureWithInsights)
 └── lib/
     ├── auth.ts                              # NextAuth config, session shape, isHeadTeacher flag
-    ├── google-ai.ts                         # Gemini helpers: OCR, transcription, grading, analytics, model fallback chain
+    ├── google-ai.ts                         # Gemini helpers: OCR, transcription, grading, analytics (AudioInsights type)
     ├── supabase.ts                          # Supabase anon client
-    └── types.ts                             # ExtendedSession, LectureWithInsights, AudioInsights types
+    └── types.ts                             # ExtendedSession types (LectureWithInsights is in components)
 ```
 
 ---
@@ -320,6 +341,6 @@ Notes/
 **Lecture recordings** (Supabase Storage — `recordings` bucket):
 ```
 recordings/
-└── [teacher_id]_[timestamp]_filename.mp3
+└── [timestamp]_[safeName].(mp3|mp4|wav|...)
 ```
-Recordings are deleted from both Supabase Storage and the Gemini File Manager immediately after transcription to protect privacy.
+Recordings are deleted from both Supabase Storage and the Gemini File Manager via `DELETE /api/lectures/transcribe` (triggered by the client after all audio chunks are successfully transcribed) to protect privacy.
