@@ -14,7 +14,7 @@ export function LandingHero() {
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
                 <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-600/20 blur-[120px] rounded-full animate-pulse" />
                 <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/20 blur-[120px] rounded-full animate-pulse delay-1000" />
-                <div className="absolute top-[40%] left-[40%] w-[30%] h-[30%] bg-amber-600/10 blur-[100px] rounded-full animate-pulse delay-500" />
+                <div className="absolute top-[40%] left-[40%] w-[30%] h-[30%] bg-amber-600/10 blur-[100px] rounded-full animate-pulse delay-5000" />
             </div>
 
             <div className="z-10 max-w-4xl w-full px-6 space-y-12 animate-in fade-in zoom-in duration-700">
