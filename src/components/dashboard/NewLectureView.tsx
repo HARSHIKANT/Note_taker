@@ -197,8 +197,13 @@ export function NewLectureView({ selectedSubject, geminiApiKey, isCourseMode, on
 
             // ── STEP 3: Client-side chunked Gemini generation (runs in browser, no Vercel timeout) ──
             // Estimate duration from file size: ~1MB per minute for MP3 (rough estimate)
-            const estimatedMinutes = Math.max(10, Math.round(file.size / (1024 * 1024)));
-            const CHUNK_SIZE_MIN = 10;
+            const estimatedMinutes = Math.max(1, Math.round(file.size / (1024 * 1024)));
+
+            // Dynamic chunk sizing: smaller chunks for short files, larger for long ones
+            const CHUNK_SIZE_MIN =
+                estimatedMinutes <= 30 ? 5
+                : estimatedMinutes <= 90 ? 10
+                : 15;
             const totalChunks = Math.ceil(estimatedMinutes / CHUNK_SIZE_MIN);
 
             if (!geminiApiKey) {
@@ -208,12 +213,21 @@ export function NewLectureView({ selectedSubject, geminiApiKey, isCourseMode, on
             }
 
             const genAI = new GoogleGenerativeAI(geminiApiKey);
-            const model = genAI.getGenerativeModel({
-                model: "gemini-2.5-flash",
-                generationConfig: { temperature: 0, maxOutputTokens: 16384 },
-            });
+
+            // Model fallback chain for transcription chunks
+            const TRANSCRIPTION_MODELS = ["gemini-2.5-flash", "gemini-3-flash-preview"];
+
+            // Rate-limit and content-filter detection helper
+            const isRetryableError = (err: any): boolean => {
+                const msg = err?.message || String(err);
+                return msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota") || msg.includes("RECITATION");
+            };
+
+            // Inter-chunk delay (65s) to fully reset the 60s rolling TPM window
+            const INTER_CHUNK_DELAY_MS = 65_000;
 
             const chunkTranscripts: string[] = [];
+            const failedChunks: number[] = [];
 
             for (let i = 0; i < totalChunks; i++) {
                 const startMin = i * CHUNK_SIZE_MIN;
@@ -228,17 +242,64 @@ Label each speaker as [Teacher] or [Student].
 If there is no audio in this range, return an empty string.
 Return only the raw labelled transcript text. No JSON, no commentary.`;
 
-                try {
-                    const result = await model.generateContent([
-                        { fileData: { mimeType: fileMimeType, fileUri } },
-                        { text: prompt },
-                    ]);
-                    const chunkText = result.response.text().trim();
-                    if (chunkText) chunkTranscripts.push(chunkText);
-                } catch (chunkErr: any) {
-                    console.error(`[Chunk ${i + 1}] Error:`, chunkErr.message);
-                    // Continue with remaining chunks even if one fails
+                let chunkDone = false;
+
+                // Try each model in the fallback chain
+                for (const modelName of TRANSCRIPTION_MODELS) {
+                    try {
+                        const model = genAI.getGenerativeModel({
+                            model: modelName,
+                            generationConfig: { temperature: 0, maxOutputTokens: 16384 },
+                        });
+                        const result = await model.generateContent([
+                            { fileData: { mimeType: fileMimeType, fileUri } },
+                            { text: prompt },
+                        ]);
+                        const chunkText = result.response.text().trim();
+                        if (chunkText) chunkTranscripts.push(chunkText);
+                        chunkDone = true;
+                        break; // success — no need to try next model
+                    } catch (chunkErr: any) {
+                        console.error(`[Chunk ${i + 1}] ${modelName} error:`, chunkErr.message);
+                        if (isRetryableError(chunkErr)) {
+                            // Rate limited or content-filtered — wait 10s then try fallback
+                            setTranscribeStatus(
+                                `${modelName} blocked (${chunkErr.message?.includes("RECITATION") ? "content filter" : "rate limit"}). Trying fallback model...`
+                            );
+                            await new Promise((r) => setTimeout(r, 10_000));
+                            continue; // try next model
+                        }
+                        // Non-rate-limit error — skip this model
+                        break;
+                    }
                 }
+
+                if (!chunkDone) {
+                    failedChunks.push(i + 1);
+                    console.error(`[Chunk ${i + 1}] All models failed. Skipping.`);
+                }
+
+                // Wait 65 seconds before the next chunk (skip after the last one)
+                if (i < totalChunks - 1) {
+                    let remaining = Math.ceil(INTER_CHUNK_DELAY_MS / 1000);
+                    await new Promise<void>((resolve) => {
+                        const timer = setInterval(() => {
+                            remaining--;
+                            setTranscribeStatus(
+                                `Chunk ${i + 1}/${totalChunks} done. Waiting ${remaining}s before next chunk to avoid rate limits...`
+                            );
+                            if (remaining <= 0) {
+                                clearInterval(timer);
+                                resolve();
+                            }
+                        }, 1000);
+                    });
+                }
+            }
+
+            // Warn teacher about any failed chunks
+            if (failedChunks.length > 0) {
+                alert(`⚠️ Chunks ${failedChunks.join(", ")} failed due to rate limits. The transcript may have gaps in those time ranges.`);
             }
 
             const fullTranscript = chunkTranscripts.join("\n\n");

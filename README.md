@@ -73,7 +73,15 @@ Student uploads photos
 ### Pipeline 2 — Lecture Content Audit
 ```
 Teacher creates lecture
-  → Mode A: Audio/video → upload to Supabase Storage → transfer to Gemini File Manager → chunked transcription
+  → Mode A: Audio/video
+      → Upload to Supabase Storage (pre-signed URL, bypasses Vercel 4.5MB limit)
+      → Server transfers to Gemini File Manager (POST /api/lectures/transcribe)
+      → Client-side chunked transcription loop:
+          - Dynamic chunk sizing: 5-min (≤30 min), 10-min (30–90 min), 15-min (>90 min)
+          - Per-chunk model fallback: gemini-2.5-flash → gemini-3-flash-preview on 429
+          - 65-second delay between chunks to reset the 60s rolling TPM window
+          - Failed chunks tracked and surfaced to teacher as warnings
+      → Cleanup: DELETE /api/lectures/transcribe (removes from Supabase + Gemini File Manager)
   → Mode B: Web Speech API live dictation → auto-restarts on silence, flushes interim on stop
   → Mode C: Manual text entry
   → Teacher publishes lecture
