@@ -60,6 +60,8 @@ export function NewLectureView({ selectedSubject, geminiApiKey, isCourseMode, on
         };
     }, []);
 
+    const lastFinalRef = useRef(""); // tracks last finalized phrase to prevent duplication on restart
+
     const startLiveTranscription = useCallback(() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -88,7 +90,15 @@ export function NewLectureView({ selectedSubject, geminiApiKey, isCourseMode, on
             }
 
             if (newFinal) {
-                setTranscript((prev) => prev + newFinal);
+                const trimmed = newFinal.trim();
+                // Dedup guard: skip if this is the same phrase that was just finalized
+                // (happens when onend auto-restart re-processes the tail audio buffer)
+                if (trimmed && trimmed === lastFinalRef.current) {
+                    console.log("[SpeechRecognition] Skipped duplicate:", trimmed);
+                } else {
+                    lastFinalRef.current = trimmed;
+                    setTranscript((prev) => prev + newFinal);
+                }
             }
             setInterimText(interim);
         };
@@ -103,9 +113,15 @@ export function NewLectureView({ selectedSubject, geminiApiKey, isCourseMode, on
         };
 
         recognition.onend = () => {
-            // Auto-restart if still "listening" (handles browser timeout)
+            // Auto-restart if still "listening" (handles browser timeout after silence)
+            // Delay 300ms to let Chrome's audio buffer flush — prevents re-processing
+            // the tail audio that was already finalized in the previous session
             if (recognitionRef.current) {
-                try { recognition.start(); } catch { /* already stopped */ }
+                setTimeout(() => {
+                    if (recognitionRef.current) {
+                        try { recognition.start(); } catch { /* already stopped */ }
+                    }
+                }, 300);
             }
         };
 
@@ -116,6 +132,7 @@ export function NewLectureView({ selectedSubject, geminiApiKey, isCourseMode, on
         setIsLiveTranscript(true);
         setTranscript(""); // fresh start for live session
         setInterimText("");
+        lastFinalRef.current = "";
         setLiveSeconds(0);
 
         liveTimerRef.current = setInterval(() => setLiveSeconds((s) => s + 1), 1000);
