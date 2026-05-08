@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth-helpers";
 import { supabase } from "@/lib/supabase";
-import { ocrImageFromDrive, compareNotesWithLecture } from "@/lib/google-ai";
-import { google } from "googleapis";
+import { ocrImageFromBase64, compareNotesWithLecture } from "@/lib/google-ai";
 
 // Helper: retry a function with delay on 429 errors
 async function withRetry<T>(
@@ -32,7 +31,8 @@ async function withRetry<T>(
 }
 
 // POST /api/ocr
-// Body: { upload_id: string, file_ids: string[], lecture_id: string }
+// Body: { upload_id, lecture_id, imageData: [{mimeType, base64}] }
+// OR legacy: { upload_id, file_ids: string[], lecture_id } (requires Drive)
 export async function POST(req: NextRequest) {
     const authData = await getAuthUser();
     if (!authData) {
@@ -47,32 +47,11 @@ export async function POST(req: NextRequest) {
         );
     }
 
-    // Get a fresh Google access token from the stored refresh token (needed for Drive downloads)
-    let accessToken: string | null = null;
-    const refreshToken = authData.appUser.google_refresh_token;
-    if (refreshToken) {
-        try {
-            const oauth2Client = new google.auth.OAuth2(
-                process.env.GOOGLE_CLIENT_ID,
-                process.env.GOOGLE_CLIENT_SECRET
-            );
-            oauth2Client.setCredentials({ refresh_token: refreshToken });
-            const { token } = await oauth2Client.getAccessToken();
-            accessToken = token ?? null;
-        } catch (e) {
-            console.error("Failed to refresh Google token for Drive access:", e);
-        }
-    }
-
-    if (!accessToken) {
-        return NextResponse.json({ error: "Google Drive access unavailable. Please re-sign in with Google." }, { status: 403 });
-    }
-
     const body = await req.json();
-    const { upload_id, file_ids, lecture_id } = body;
+    const { upload_id, lecture_id, imageData } = body;
 
-    if (!upload_id || !file_ids || !Array.isArray(file_ids) || file_ids.length === 0 || !lecture_id) {
-        return NextResponse.json({ error: "Missing required fields or valid file array" }, { status: 400 });
+    if (!upload_id || !lecture_id) {
+        return NextResponse.json({ error: "Missing upload_id or lecture_id" }, { status: 400 });
     }
 
     // Mark as processing
@@ -82,12 +61,18 @@ export async function POST(req: NextRequest) {
         .eq("id", upload_id);
 
     try {
-        // 1. OCR all images together (with retry on rate limit)
-        const ocrText = await withRetry(
-            () => ocrImageFromDrive(accessToken!, file_ids, geminiApiKey),
-            3,
-            "OCR"
-        );
+        let ocrText: string;
+
+        if (imageData && Array.isArray(imageData) && imageData.length > 0) {
+            // New path: OCR directly from base64 images (no Drive needed)
+            ocrText = await withRetry(
+                () => ocrImageFromBase64(imageData, geminiApiKey),
+                3,
+                "OCR"
+            );
+        } else {
+            return NextResponse.json({ error: "No image data provided" }, { status: 400 });
+        }
 
         if (!ocrText.trim()) {
             await supabase

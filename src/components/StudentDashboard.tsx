@@ -257,29 +257,50 @@ export function StudentDashboard() {
         setLogs((prev) => [...prev, `🗌 Compressing ${files.length} images...`]);
         const compressed = await Promise.all(files.map((f) => compressImage(f)));
 
+        // 1. Always save to Supabase Storage (primary storage)
         const formData = new FormData();
         formData.append("subject", selectedSubject);
         formData.append("lecture_id", selectedLecture.id);
         compressed.forEach((file) => formData.append("files", file));
 
         try {
-            const res = await fetch("/api/bulk-upload", { method: "POST", body: formData });
+            const res = await fetch("/api/upload-notes", { method: "POST", body: formData });
             const data = await res.json();
 
             if (res.ok) {
-                const successResults = data.results.filter((r: any) => r.status === "success");
-                setLogs((prev) => [...prev, `✅ Uploaded ${successResults.length} files`]);
+                const successCount = data.successCount || 0;
+                setLogs((prev) => [...prev, `✅ Saved ${successCount} files to your account`]);
 
-                // Trigger OCR for the combined batch
-                if (data.uploadId && data.fileIds && data.fileIds.length > 0) {
-                    setLogs((prev) => [...prev, `🔍 Processing OCR for ${data.fileIds.length} pages...`]);
+                // 2. Optionally also upload to Google Drive (if checkbox is checked)
+                if (alsoDrive && hasGoogleDrive) {
+                    setLogs((prev) => [...prev, `☁️ Uploading to Google Drive...`]);
+                    try {
+                        const driveFormData = new FormData();
+                        driveFormData.append("subject", selectedSubject);
+                        driveFormData.append("lecture_id", selectedLecture.id);
+                        compressed.forEach((file) => driveFormData.append("files", file));
+
+                        const driveRes = await fetch("/api/bulk-upload", { method: "POST", body: driveFormData });
+                        if (driveRes.ok) {
+                            setLogs((prev) => [...prev, `✅ Also saved to Google Drive`]);
+                        } else {
+                            setLogs((prev) => [...prev, `⚠️ Drive backup failed (notes are still saved)`]);
+                        }
+                    } catch {
+                        setLogs((prev) => [...prev, `⚠️ Drive backup failed (notes are still saved)`]);
+                    }
+                }
+
+                // 3. Trigger OCR analysis if we got an upload record
+                if (data.uploadId && data.imageData && data.imageData.length > 0) {
+                    setLogs((prev) => [...prev, `🔍 Analyzing ${data.imageData.length} pages...`]);
                     try {
                         const ocrRes = await fetch("/api/ocr", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
                                 upload_id: data.uploadId,
-                                file_ids: data.fileIds,
+                                imageData: data.imageData,
                                 lecture_id: selectedLecture.id,
                             }),
                         });
@@ -287,13 +308,13 @@ export function StudentDashboard() {
                         if (ocrRes.ok) {
                             setLogs((prev) => [
                                 ...prev,
-                                `✅ OCR Complete: Match score ${ocrData.match?.score}%`,
+                                `✅ Analysis Complete: Match score ${ocrData.match?.score}%`,
                             ]);
                         } else {
-                            setLogs((prev) => [...prev, `⚠️ OCR failed for this submission`]);
+                            setLogs((prev) => [...prev, `⚠️ Analysis pending — check back later`]);
                         }
                     } catch {
-                        setLogs((prev) => [...prev, `⚠️ OCR error for this submission`]);
+                        setLogs((prev) => [...prev, `⚠️ Analysis error — check back later`]);
                     }
                 }
 

@@ -143,6 +143,29 @@ export async function ocrImageFromDrive(
     return extractedText === "NO_TEXT_FOUND" ? "" : extractedText;
 }
 
+// ── OCR: from base64 images directly (no Drive needed) ──────────────────────
+export async function ocrImageFromBase64(
+    images: { mimeType: string; base64: string }[],
+    geminiApiKey: string
+): Promise<string> {
+    const parts: any[] = [
+        ...images.map((img) => ({ inlineData: { mimeType: img.mimeType, data: img.base64 } })),
+        { text: "Extract ALL text from these images of handwritten notes. Organize and structure the extracted text logically (e.g., using headings, bullet points, and appropriate formatting based on the layout of the notes). Combine the text from all pages cohesively. Output ONLY the structured text content, nothing else. If no text is found, respond with exactly: NO_TEXT_FOUND" },
+    ];
+
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+
+    const extractedText = await callWithModelFallback("OCR", async (modelName) => {
+        const model = genAI.getGenerativeModel({ model: modelName, generationConfig: { temperature: 0 } });
+        const result = await model.generateContent(parts);
+        const text = result.response.text().trim();
+        console.log(`[OCR-Base64] ${modelName} extracted text length: ${text.length} chars`);
+        return text;
+    });
+
+    return extractedText === "NO_TEXT_FOUND" ? "" : extractedText;
+}
+
 // ── Types: Audio Transcription Result ─────────────────────────────────
 
 export interface ContentQualityParameter {

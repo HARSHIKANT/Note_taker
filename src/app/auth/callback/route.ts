@@ -14,11 +14,12 @@ export async function GET(request: Request) {
         if (!error && data.session) {
             // If the user signed in via Google, store the refresh token for Drive access
             const providerRefreshToken = data.session.provider_refresh_token;
-            if (providerRefreshToken && data.session.user?.id) {
+            const userEmail = data.session.user?.email;
+            if (providerRefreshToken && userEmail) {
                 await adminSupabase
                     .from("users")
                     .update({ google_refresh_token: providerRefreshToken })
-                    .eq("id", data.session.user.id);
+                    .eq("email", userEmail);
             }
 
             const forwardedHost = request.headers.get("x-forwarded-host");
