@@ -224,106 +224,86 @@ export function StudentDashboard() {
         });
     };
 
-    // Compress images client-side before upload to stay under Vercel's 4.5MB limit
-    const compressImage = (file: File, maxDim = 1200, quality = 0.75): Promise<File> =>
-        new Promise((resolve) => {
-            if (!file.type.startsWith("image/")) { resolve(file); return; }
-            const img = document.createElement("img") as HTMLImageElement;
-            const url = URL.createObjectURL(file);
-            img.onload = () => {
-                URL.revokeObjectURL(url);
-                let { width, height } = img;
-                if (width > maxDim || height > maxDim) {
-                    if (width > height) { height = Math.round((height * maxDim) / width); width = maxDim; }
-                    else { width = Math.round((width * maxDim) / height); height = maxDim; }
-                }
-                const canvas = document.createElement("canvas");
-                canvas.width = width; canvas.height = height;
-                canvas.getContext("2d")?.drawImage(img, 0, 0, width, height);
-                canvas.toBlob(
-                    (blob) => resolve(blob ? new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" }) : file),
-                    "image/jpeg", quality
-                );
-            };
-            img.onerror = () => resolve(file);
-            img.src = url;
-        });
-
     const handleUpload = async () => {
         if (files.length === 0 || !selectedLecture) return;
         setUploading(true);
         setLogs([]);
 
-        setLogs((prev) => [...prev, `🗌 Compressing ${files.length} images...`]);
-        const compressed = await Promise.all(files.map((f) => compressImage(f)));
-
-        // 1. Always save to Supabase Storage (primary storage)
-        const formData = new FormData();
-        formData.append("subject", selectedSubject);
-        formData.append("lecture_id", selectedLecture.id);
-        compressed.forEach((file) => formData.append("files", file));
-
         try {
-            const res = await fetch("/api/upload-notes", { method: "POST", body: formData });
-            const data = await res.json();
+            // Step 1: Get signed upload URLs from the server
+            setLogs((prev) => [...prev, `📤 Preparing upload for ${files.length} images...`]);
+            const urlRes = await fetch("/api/notes/upload-url", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    files: files.map((f) => ({ fileName: f.name, mimeType: f.type || "image/jpeg" })),
+                }),
+            });
+            const urlData = await urlRes.json();
 
-            if (res.ok) {
-                const successCount = data.successCount || 0;
-                setLogs((prev) => [...prev, `✅ Saved ${successCount} files to your account`]);
-
-                // 2. Optionally also upload to Google Drive (if checkbox is checked)
-                if (alsoDrive && hasGoogleDrive) {
-                    setLogs((prev) => [...prev, `☁️ Uploading to Google Drive...`]);
-                    try {
-                        const driveFormData = new FormData();
-                        driveFormData.append("subject", selectedSubject);
-                        driveFormData.append("lecture_id", selectedLecture.id);
-                        compressed.forEach((file) => driveFormData.append("files", file));
-
-                        const driveRes = await fetch("/api/bulk-upload", { method: "POST", body: driveFormData });
-                        if (driveRes.ok) {
-                            setLogs((prev) => [...prev, `✅ Also saved to Google Drive`]);
-                        } else {
-                            setLogs((prev) => [...prev, `⚠️ Drive backup failed (notes are still saved)`]);
-                        }
-                    } catch {
-                        setLogs((prev) => [...prev, `⚠️ Drive backup failed (notes are still saved)`]);
-                    }
-                }
-
-                // 3. Trigger OCR analysis if we got an upload record
-                if (data.uploadId && data.imageData && data.imageData.length > 0) {
-                    setLogs((prev) => [...prev, `🔍 Analyzing ${data.imageData.length} pages...`]);
-                    try {
-                        const ocrRes = await fetch("/api/ocr", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                upload_id: data.uploadId,
-                                imageData: data.imageData,
-                                lecture_id: selectedLecture.id,
-                            }),
-                        });
-                        const ocrData = await ocrRes.json();
-                        if (ocrRes.ok) {
-                            setLogs((prev) => [
-                                ...prev,
-                                `✅ Analysis Complete: Match score ${ocrData.match?.score}%`,
-                            ]);
-                        } else {
-                            setLogs((prev) => [...prev, `⚠️ Analysis pending — check back later`]);
-                        }
-                    } catch {
-                        setLogs((prev) => [...prev, `⚠️ Analysis error — check back later`]);
-                    }
-                }
-
-                setFiles([]);
-                setPreviews([]);
-                fetchMyUploads(selectedLecture.id);
-            } else {
-                setLogs((prev) => [...prev, `❌ Upload failed: ${data.error}`]);
+            if (!urlRes.ok || !urlData.uploads) {
+                setLogs((prev) => [...prev, `❌ Failed to prepare upload: ${urlData.error}`]);
+                setUploading(false);
+                return;
             }
+
+            // Step 2: Upload each image directly to Supabase Storage (full resolution, no compression)
+            const filePaths: string[] = [];
+            for (let i = 0; i < files.length; i++) {
+                setLogs((prev) => [...prev, `📤 Uploading page ${i + 1} of ${files.length}...`]);
+                const upload = urlData.uploads[i];
+
+                const putRes = await fetch(upload.signedUrl, {
+                    method: "PUT",
+                    headers: { "Content-Type": files[i].type || "image/jpeg" },
+                    body: files[i],
+                });
+
+                if (putRes.ok) {
+                    filePaths.push(upload.filePath);
+                } else {
+                    setLogs((prev) => [...prev, `⚠️ Page ${i + 1} upload failed, skipping`]);
+                }
+            }
+
+            if (filePaths.length === 0) {
+                setLogs((prev) => [...prev, `❌ No images uploaded successfully`]);
+                setUploading(false);
+                return;
+            }
+
+            setLogs((prev) => [...prev, `✅ ${filePaths.length} images uploaded`]);
+
+            // Step 3: Process — OCR + optional Drive upload + cleanup
+            setLogs((prev) => [...prev, `🔍 Analyzing your notes...`]);
+            const processRes = await fetch("/api/notes/process", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    filePaths,
+                    lectureId: selectedLecture.id,
+                    subject: selectedSubject,
+                    alsoDrive: alsoDrive && hasGoogleDrive,
+                }),
+            });
+
+            const processData = await processRes.json();
+
+            if (processRes.ok) {
+                setLogs((prev) => [
+                    ...prev,
+                    `✅ Analysis Complete: Match score ${processData.match?.score}%`,
+                ]);
+                if (processData.driveFileCount > 0) {
+                    setLogs((prev) => [...prev, `☁️ Also saved ${processData.driveFileCount} files to Google Drive`]);
+                }
+            } else {
+                setLogs((prev) => [...prev, `⚠️ Analysis failed: ${processData.error}`]);
+            }
+
+            setFiles([]);
+            setPreviews([]);
+            fetchMyUploads(selectedLecture.id);
         } catch (err: any) {
             setLogs((prev) => [...prev, `❌ Network Error: ${err.message}`]);
         }

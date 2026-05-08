@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import sharp from "sharp";
+
 
 // ── Model Fallback Chain ────────────────────────────────────────────────────
 // Primary → Fallback 1 → Fallback 2, with up to 3 retry rounds (0s, 20s, 40s wait)
@@ -98,18 +98,6 @@ async function downloadFromDrive(
     }
 
     console.log(`[Drive] Downloaded ${fileId}, size: ${buffer.length} bytes, mimeType: ${origMimeType}`);
-
-    // Compress large images for OCR (Cloud Vision limit ~10MB for base64)
-    const isImage = origMimeType.startsWith("image/");
-    if (isImage && buffer.length > 2 * 1024 * 1024) {
-        console.log(`[Drive] Image is ${(buffer.length / 1024 / 1024).toFixed(1)}MB, compressing...`);
-        buffer = await sharp(buffer)
-            .resize(1600, null, { withoutEnlargement: true }) // max 1600px wide
-            .jpeg({ quality: 80 })
-            .toBuffer();
-        console.log(`[Drive] Compressed to ${(buffer.length / 1024 / 1024).toFixed(1)}MB JPEG`);
-        return { buffer, mimeType: "image/jpeg" };
-    }
 
     return { buffer, mimeType: origMimeType };
 }
@@ -479,19 +467,18 @@ export async function compareNotesWithLecture(
 ): Promise<MatchResult> {
     const genAI = new GoogleGenerativeAI(geminiApiKey);
 
-    const prompt = `You are a strict educational AI assistant and forensic text analyzer. You have two distinct tasks:
+    const prompt = `You are a strict, consistent educational grading assistant. Your ONLY job is to compare a student's handwritten notes against the teacher's lecture and produce a deterministic match score.
 
-TASK 1: Note Comparison
-Compare a student's handwritten notes (extracted via OCR) with the teacher's lecture transcript.
-Analyze how well the student's notes cover the key concepts from the lecture.
-
-TASK 2: Forensic AI Analysis (Detection)
-Conduct a deep-layer linguistic audit to determine if the notes are an organic human byproduct or a synthetic AI summary. You must be extremely skeptical of "clean" notes.
-Structural Smoothing (AI High Signal): Does the text reorganize a rambling transcript into a perfectly optimized logical hierarchy (e.g., Introduction, Key Points, Conclusion) that the speaker never explicitly structured?
-Syntactic Parallelism (AI High Signal): Do bullet points exhibit repetitive grammatical structures (e.g., every line starting with an action verb or gerund)? Humans in real-time environments rarely maintain this level of consistency.
-Information Density (AI High Signal): Does the text include "high-level summaries" of complex sections that were only briefly mentioned in the transcript? AI tends to "hallucinate" broader context it already knows about a topic.
-Temporal Friction (Human High Signal): Are there "messy" logical leaps, idiosyncratic abbreviations (e.g., "w/o", "b/c", "stats"), or a focus on specific anecdotes/verbal tics that an AI would typically "clean out" as noise?
-OCR Artifacts: Look for character-level glitches. If the notes are perfectly formatted Markdown without a single OCR error from handwriting, treat it as a digital copy-paste (High AI Probability).
+SCORING RUBRIC (follow exactly):
+1. First, extract ALL key concepts/topics from the LECTURE TRANSCRIPT. List them.
+2. For each key concept, check if the student's notes mention or cover it (even partially, with abbreviations or paraphrasing). Mark each as COVERED or MISSING.
+3. Calculate the score: score = (number of COVERED concepts / total concepts) × 100, rounded to the nearest integer.
+4. Do NOT penalize for:
+   - Spelling errors, OCR artifacts, or messy handwriting
+   - Abbreviations (e.g., "w/o" = "without", "F=ma" = "Force equals mass times acceleration")
+   - Different ordering or formatting than the lecture
+   - Extra content the student wrote that isn't in the lecture
+5. DO penalize (mark as MISSING) only when a key concept from the lecture is completely absent from the notes.
 
 LECTURE TRANSCRIPT:
 """
@@ -503,25 +490,34 @@ STUDENT'S NOTES (OCR):
 ${ocrText}
 """
 
-Return a JSON object with the following fields depending on the analysis of BOTH tasks:
-- "score": number from 0 to 100 representing percentage of key concepts covered
-- "feedback": 50 words precise summary of the student's note quality
-- "covered": array of key topics the student captured well
-- "missing": array of important topics the student missed
-- "aiProbability": number from 0 to 100 representing the probability that the text is AI-generated
-- "humanProbability": number from 0 to 100 representing the probability that the text is human-written
-- "explanation": a crisp, to-the-point explanation (less than 10 words) of why it was flagged as AI or human.
+Return ONLY a valid JSON object with these fields:
+- "score": integer 0-100, calculated exactly as described above
+- "feedback": 1-2 sentence summary of note quality (max 50 words)
+- "covered": array of key topics the student captured (use short labels)
+- "missing": array of key topics the student missed (use short labels)
 
 Return ONLY valid JSON, nothing else.`;
 
     return callWithModelFallback("compareNotes", async (modelName) => {
         const model = genAI.getGenerativeModel({
             model: modelName,
-            generationConfig: { temperature: 0, responseMimeType: "application/json" },
+            generationConfig: {
+                temperature: 0,
+                responseMimeType: "application/json",
+            },
         });
         const result = await model.generateContent(prompt);
         const cleaned = result.response.text().replace(/```json\n?|\n?```/g, "").trim();
-        return JSON.parse(cleaned) as MatchResult;
+        const parsed = JSON.parse(cleaned);
+        return {
+            score: parsed.score ?? 0,
+            feedback: parsed.feedback ?? "",
+            covered: parsed.covered ?? [],
+            missing: parsed.missing ?? [],
+            aiProbability: 0,
+            humanProbability: 100,
+            explanation: "AI detection disabled",
+        } as MatchResult;
     });
 }
 
