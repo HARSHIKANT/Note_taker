@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { supabase } from "@/lib/supabase";
-import type { ExtendedSession } from "@/lib/types";
 
 // PATCH /api/user/settings
 // Body: { geminiApiKey: string }
 export async function PATCH(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.userId) {
+    const authData = await getAuthUser();
+    if (!authData) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -21,7 +20,7 @@ export async function PATCH(req: NextRequest) {
     const { error } = await supabase
         .from("users")
         .update({ gemini_api_key: geminiApiKey.trim() || null })
-        .eq("id", session.userId);
+        .eq("id", authData.appUser.id);
 
     if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,16 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { useAuth } from "@/app/providers";
 import {
     LogOut, BookOpen, Upload, X, Plus, Loader2, FileText,
     Smartphone, Camera, ChevronLeft, Check, AlertCircle, Atom,
-    FlaskConical, Calculator,
+    FlaskConical, Calculator, HardDrive,
 } from "lucide-react";
 import Image from "next/image";
 import { SUBJECTS } from "@/lib/types";
 import ApiKeyModal from "./ApiKeyModal";
-import type { ExtendedSession } from "@/lib/types";
 
 const SUBJECT_ICONS: Record<string, any> = {
     Physics: Atom,
@@ -54,9 +53,12 @@ interface AIFeedback {
 type View = "subjects" | "lectures" | "upload";
 
 export function StudentDashboard() {
-    const { data: session, update } = useSession();
-    const extSession = session as unknown as ExtendedSession;
-    const hasApiKey = !!extSession?.geminiApiKey;
+    const { user, appUser, signOut, refreshAppUser, hasGoogleDrive } = useAuth();
+    const hasApiKey = !!appUser?.gemini_api_key;
+
+    // Google Drive upload state
+    const [alsoDrive, setAlsoDrive] = useState(false);
+    const [driveUploading, setDriveUploading] = useState(false);
 
     const [view, setView] = useState<View>("subjects");
     const [selectedSubject, setSelectedSubject] = useState<string>("");
@@ -99,17 +101,17 @@ export function StudentDashboard() {
             .catch(() => { setDbClass(null); });
     }, []);
 
-    // Use DB data when loaded, fall back to session while loading
-    const isClassStudent = dbClass !== undefined ? !!dbClass : !!extSession?.class;
+    // Use DB data when loaded, fall back to appUser while loading
+    const isClassStudent = dbClass !== undefined ? !!dbClass : !!appUser?.class;
     const hasCourses = dbClass !== undefined
         ? dbEnrolledCourseIds.length > 0
-        : (extSession?.enrolledCourses?.length ?? 0) > 0;
+        : (appUser?.enrolled_courses?.length ?? 0) > 0;
 
     // Fetch enrolled courses for course-based students
     useEffect(() => {
         const ids: string[] = dbEnrolledCourseIds.length > 0
             ? dbEnrolledCourseIds
-            : ((extSession as any)?.enrolledCourses ?? []);
+            : (appUser?.enrolled_courses ?? []);
         if (ids.length > 0) {
             fetch("/api/courses")
                 .then((r) => r.json())
@@ -320,7 +322,7 @@ export function StudentDashboard() {
     return (
         <div className="min-h-screen bg-neutral-950 text-neutral-200 font-sans">
             {/* API Key Modal — shown until student provides their key */}
-            {!hasApiKey && <ApiKeyModal onSaved={() => update()} />}
+            {!hasApiKey && <ApiKeyModal onSaved={() => refreshAppUser()} />}
             {/* Header */}
             <div className="sticky top-0 z-30 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-800">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 lg:py-4 flex items-center justify-between">
@@ -338,18 +340,18 @@ export function StudentDashboard() {
                         )}
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold text-base">
-                                {extSession?.user?.name?.[0] || "S"}
+                                {(appUser?.name || user?.user_metadata?.full_name || "S")[0]}
                             </div>
                             <div>
-                                <p className="font-semibold text-white text-sm lg:text-base">{extSession?.user?.name}</p>
+                                <p className="font-semibold text-white text-sm lg:text-base">{appUser?.name || user?.user_metadata?.full_name || user?.email}</p>
                                 <p className="text-xs lg:text-sm text-neutral-400">
-                                    {extSession?.instituteName && <span className="text-purple-400">{extSession.instituteName} · </span>}
-                                    {extSession?.class ? `Class ${extSession.class} · ` : ""}Student
+                                    {appUser?.class ? `Class ${appUser.class} · ` : ""}Student
+                                    {hasGoogleDrive && <span className="text-green-400 ml-1">· Drive ✓</span>}
                                 </p>
                             </div>
                         </div>
                     </div>
-                    <button onClick={() => signOut()} className="flex items-center gap-2 px-3 py-2 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors text-sm">
+                    <button onClick={signOut} className="flex items-center gap-2 px-3 py-2 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors text-sm">
                         <LogOut className="w-5 h-5" />
                         <span className="hidden sm:inline">Sign out</span>
                     </button>
@@ -624,17 +626,32 @@ export function StudentDashboard() {
                                 )}
 
                                 {files.length > 0 && (
-                                    <button
-                                        onClick={handleUpload}
-                                        disabled={uploading}
-                                        className="pointer-events-auto flex-1 md:flex-none md:w-auto px-6 h-14 rounded-full bg-purple-600 text-white shadow-xl flex items-center justify-center gap-2 font-semibold hover:bg-purple-500 active:scale-95 transition-all disabled:opacity-50 z-10"
-                                    >
-                                        {uploading ? (
-                                            <><Loader2 className="w-5 h-5 animate-spin" /> Uploading...</>
-                                        ) : (
-                                            <><Upload className="w-5 h-5" /> Submit Notes <span className="bg-purple-700 px-2 py-0.5 rounded text-sm ml-1">{files.length}</span></>
+                                    <div className="pointer-events-auto flex flex-col items-end gap-2 z-10">
+                                        {/* Google Drive toggle — only for Google-authed students */}
+                                        {hasGoogleDrive && (
+                                            <label className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-700 backdrop-blur-sm cursor-pointer select-none">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={alsoDrive}
+                                                    onChange={(e) => setAlsoDrive(e.target.checked)}
+                                                    className="accent-green-500 w-4 h-4"
+                                                />
+                                                <HardDrive className="w-3.5 h-3.5 text-green-400" />
+                                                <span className="text-xs text-neutral-300">Also save to Google Drive</span>
+                                            </label>
                                         )}
-                                    </button>
+                                        <button
+                                            onClick={handleUpload}
+                                            disabled={uploading}
+                                            className="flex-1 md:flex-none md:w-auto px-6 h-14 rounded-full bg-purple-600 text-white shadow-xl flex items-center justify-center gap-2 font-semibold hover:bg-purple-500 active:scale-95 transition-all disabled:opacity-50"
+                                        >
+                                            {uploading ? (
+                                                <><Loader2 className="w-5 h-5 animate-spin" /> Uploading...</>
+                                            ) : (
+                                                <><Upload className="w-5 h-5" /> Submit Notes <span className="bg-purple-700 px-2 py-0.5 rounded text-sm ml-1">{files.length}</span></>
+                                            )}
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </div>

@@ -1,40 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { supabase } from "@/lib/supabase";
 import { CLASSES, SUBJECTS } from "@/lib/types";
-import type { ExtendedSession } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.user?.email) {
+    const authData = await getAuthUser();
+    if (!authData) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const { appUser } = authData;
 
     const body = await req.json();
     const { class: userClass, enrolled_courses, assigned_subjects } = body;
 
     // Role is now pre-assigned by the roster — validate it exists
-    if (!session.role) {
+    if (!appUser.role) {
         return NextResponse.json({ error: "Your email is not registered with any institute. Ask your Head Teacher to add you." }, { status: 403 });
     }
 
     // Validate student curriculum fields
-    if (session.role === "student") {
+    if (appUser.role === "student") {
         const hasClass = userClass && CLASSES.includes(userClass);
         const hasCourses = Array.isArray(enrolled_courses) && enrolled_courses.length > 0;
 
-        // Students must select at least one (class OR courses, or both)
         if (!hasClass && !hasCourses) {
             return NextResponse.json(
                 { error: "Please select a class or at least one course" },
                 { status: 400 }
             );
         }
-        // NOTE: class + courses simultaneously is now ALLOWED — no blocking validation
     }
 
     // Validate teacher subject/course selections
-    if (session.role === "teacher") {
+    if (appUser.role === "teacher") {
         const hasSubjects = Array.isArray(assigned_subjects) && assigned_subjects.length > 0;
         const hasCourses = Array.isArray(enrolled_courses) && enrolled_courses.length > 0;
 
@@ -45,7 +43,6 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // Validate subjects against known list
         if (hasSubjects) {
             const invalid = assigned_subjects.filter((s: string) => !SUBJECTS.includes(s as any));
             if (invalid.length > 0) {
@@ -57,14 +54,14 @@ export async function POST(req: NextRequest) {
     // Build update payload
     const updateData: Record<string, unknown> = {};
 
-    if (session.role === "student") {
+    if (appUser.role === "student") {
         updateData.class = userClass || null;
         updateData.enrolled_courses = Array.isArray(enrolled_courses) && enrolled_courses.length > 0
             ? enrolled_courses
             : null;
     }
 
-    if (session.role === "teacher") {
+    if (appUser.role === "teacher") {
         updateData.assigned_subjects = Array.isArray(assigned_subjects) && assigned_subjects.length > 0
             ? assigned_subjects
             : null;
@@ -76,7 +73,7 @@ export async function POST(req: NextRequest) {
     const { error } = await supabase
         .from("users")
         .update(updateData)
-        .eq("email", session.user.email);
+        .eq("email", authData.email);
 
     if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

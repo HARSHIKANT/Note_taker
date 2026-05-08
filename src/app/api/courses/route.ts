@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { supabase } from "@/lib/supabase";
-import type { ExtendedSession } from "@/lib/types";
 
 // GET /api/courses — returns all available courses for the current user's institute
 export async function GET() {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.userId) {
+    const authData = await getAuthUser();
+    if (!authData) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -15,9 +14,8 @@ export async function GET() {
         .select("id, name, created_at")
         .order("created_at", { ascending: true });
 
-    // Scope to institute if one is set
-    if (session.instituteId) {
-        query = query.eq("institute_id", session.instituteId);
+    if (authData.appUser.institute_id) {
+        query = query.eq("institute_id", authData.appUser.institute_id);
     }
 
     const { data, error } = await query;
@@ -27,8 +25,8 @@ export async function GET() {
 
 // POST /api/courses — Head Teacher creates a new course
 export async function POST(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.userId || !session.isHeadTeacher) {
+    const authData = await getAuthUser();
+    if (!authData || !authData.appUser.is_head_teacher) {
         return NextResponse.json({ error: "Head Teacher access required" }, { status: 403 });
     }
 
@@ -41,7 +39,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabase
         .from("courses")
-        .insert({ name: name.trim(), created_by: session.userId, institute_id: session.instituteId ?? null })
+        .insert({ name: name.trim(), created_by: authData.appUser.id, institute_id: authData.appUser.institute_id ?? null })
         .select("id, name, created_at")
         .single();
 
@@ -51,8 +49,8 @@ export async function POST(req: NextRequest) {
 
 // DELETE /api/courses?id=...
 export async function DELETE(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.userId || !session.isHeadTeacher) {
+    const authData = await getAuthUser();
+    if (!authData || !authData.appUser.is_head_teacher) {
         return NextResponse.json({ error: "Head Teacher access required" }, { status: 403 });
     }
 

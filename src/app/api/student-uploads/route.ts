@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { supabase } from "@/lib/supabase";
-import type { ExtendedSession } from "@/lib/types";
 
 // GET /api/student-uploads?lecture_id=...
 // Returns the current student's uploads for a specific lecture
 export async function GET(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
+    const authData = await getAuthUser();
+    const session = authData ? { userId: authData.appUser.id, role: authData.appUser.role, isHeadTeacher: authData.appUser.is_head_teacher, instituteId: authData.appUser.institute_id, geminiApiKey: authData.appUser.gemini_api_key, accessToken: "present", user: { email: authData.email } } : null;
     if (!session?.userId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

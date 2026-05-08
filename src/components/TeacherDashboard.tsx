@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { useAuth } from "@/app/providers";
 import { LogOut, ChevronLeft, BarChart2, BookMarked, Plus, Trash2, Loader2, BookOpen, Users } from "lucide-react";
 import { Lecture, Submission } from "./dashboard/types";
 import { SubjectsView } from "./dashboard/SubjectsView";
@@ -12,21 +12,19 @@ import { TeacherAnalyticsView } from "./dashboard/TeacherAnalyticsView";
 import { HeadTeacherAnalyticsView } from "./dashboard/HeadTeacherAnalyticsView";
 import { RosterManagement } from "./dashboard/RosterManagement";
 import ApiKeyModal from "./ApiKeyModal";
-import type { ExtendedSession } from "@/lib/types";
 
 type View = "subjects" | "lectures" | "new-lecture" | "submissions" | "analytics" | "courses" | "roster";
 
 export function TeacherDashboard() {
-    const { data: session, update } = useSession();
-    const extSession = session as unknown as ExtendedSession;
-    const isHeadTeacher = extSession?.isHeadTeacher ?? false;
-    const hasApiKey = !!extSession?.geminiApiKey;
+    const { user, appUser, signOut, refreshAppUser } = useAuth();
+    const isHeadTeacher = appUser?.is_head_teacher ?? false;
+    const hasApiKey = !!appUser?.gemini_api_key;
 
     const [view, setView] = useState<View>("subjects");
     const [selectedSubject, setSelectedSubject] = useState<string>("");
     const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
 
-    // Fetch teacher's assigned subjects from DB (bypasses stale JWT session)
+    // Fetch teacher's assigned subjects from DB (bypasses stale session)
     const [dbAssignedSubjects, setDbAssignedSubjects] = useState<string[] | null>(null);
     useEffect(() => {
         fetch("/api/user/me")
@@ -209,10 +207,13 @@ export function TeacherDashboard() {
         setLoadingSubs(false);
     };
 
+    const displayName = appUser?.name || user?.user_metadata?.full_name || user?.email || "Teacher";
+    const instituteName = null; // Will be fetched separately if needed
+
     return (
         <div className="min-h-screen bg-neutral-950 text-neutral-200 font-sans">
             {/* API Key Modal — shown until teacher provides their key */}
-            {!hasApiKey && <ApiKeyModal onSaved={() => update()} />}
+            {!hasApiKey && <ApiKeyModal onSaved={() => refreshAppUser()} />}
             {/* Header */}
             <div className="sticky top-0 z-30 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-800">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 lg:py-4 flex items-center justify-between">
@@ -237,19 +238,16 @@ export function TeacherDashboard() {
                                 ? "bg-gradient-to-tr from-amber-400 to-orange-500 shadow-md shadow-amber-500/30"
                                 : "bg-gradient-to-tr from-blue-500 to-cyan-500"
                                 }`}>
-                                {extSession?.user?.name?.[0] || "T"}
+                                {displayName[0] || "T"}
                             </div>
                             <div>
                                 <p className="font-semibold text-white text-sm lg:text-base flex items-center gap-1.5">
-                                    {extSession?.user?.name}
+                                    {displayName}
                                     {isHeadTeacher && (
                                         <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 border border-amber-400/30 px-1.5 py-0.5 rounded-full">HEAD</span>
                                     )}
                                 </p>
                                 <p className="text-xs lg:text-sm text-neutral-400">
-                                    {(extSession as any)?.instituteName && (
-                                        <span className="text-amber-400/80">{(extSession as any).instituteName} · </span>
-                                    )}
                                     {isHeadTeacher ? "Head Teacher" : "Teacher"}
                                 </p>
                             </div>
@@ -399,7 +397,7 @@ export function TeacherDashboard() {
                     <NewLectureView
                         selectedSubject={selectedSubject}
                         onSave={saveLecture}
-                        geminiApiKey={extSession?.geminiApiKey ?? ""}
+                        geminiApiKey={appUser?.gemini_api_key ?? ""}
                         isCourseMode={!!selectedCourseId}
                     />
                 )}
@@ -417,7 +415,7 @@ export function TeacherDashboard() {
 
                 {view === "analytics" && (
                     isHeadTeacher
-                        ? <HeadTeacherAnalyticsView myId={(session as any)?.userId ?? ""} />
+                        ? <HeadTeacherAnalyticsView myId={appUser?.id ?? ""} />
                         : <TeacherAnalyticsView isHeadTeacher={false} />
                 )}
 

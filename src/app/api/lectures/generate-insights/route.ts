@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { supabase } from "@/lib/supabase";
 import { callWithModelFallback } from "@/lib/google-ai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { ExtendedSession } from "@/lib/types";
 
 // POST /api/lectures/generate-insights
 // Body: { lecture_id: string }
 // Uses the teacher's own Gemini API key to aggregate class-wide missing topics.
 export async function POST(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
+    const authData = await getAuthUser();
+    const session = authData ? { userId: authData.appUser.id, role: authData.appUser.role, isHeadTeacher: authData.appUser.is_head_teacher, instituteId: authData.appUser.institute_id, geminiApiKey: authData.appUser.gemini_api_key, accessToken: "present", user: { email: authData.email } } : null;
     if (!session?.accessToken || session.role !== "teacher") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

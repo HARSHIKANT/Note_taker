@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { createClient } from "@supabase/supabase-js";
-import type { ExtendedSession } from "@/lib/types";
 
 // POST /api/lectures/upload-audio
 // Body: { fileName: string, mimeType: string }
@@ -9,7 +8,8 @@ import type { ExtendedSession } from "@/lib/types";
 // The client uses the signedUrl to PUT the file directly to Supabase Storage —
 // the file payload NEVER passes through this Vercel function.
 export async function POST(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
+    const authData = await getAuthUser();
+    const session = authData ? { userId: authData.appUser.id, role: authData.appUser.role, isHeadTeacher: authData.appUser.is_head_teacher, instituteId: authData.appUser.institute_id, geminiApiKey: authData.appUser.gemini_api_key, accessToken: "present", user: { email: authData.email } } : null;
     if (!session?.userId || session.role !== "teacher") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

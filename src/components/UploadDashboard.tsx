@@ -2,14 +2,14 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { useAuth } from "@/app/providers";
 import { Upload, X, Plus, Check, Loader2, LogOut, FileText, Smartphone, ChevronDown, Camera, SwitchCamera } from "lucide-react";
 import Image from "next/image";
 
 const SUBJECTS = ["Physics", "Chemistry", "Biology", "Maths", "English", "CS"];
 
 export function UploadDashboard() {
-    const { data: session } = useSession();
+    const { user, appUser, signOut } = useAuth();
     const [subject, setSubject] = useState(SUBJECTS[0]);
     const [files, setFiles] = useState<File[]>([]);
     const [uploading, setUploading] = useState(false);
@@ -154,15 +154,15 @@ export function UploadDashboard() {
                 <div className="flex justify-between items-center bg-neutral-900/50 p-4 rounded-xl border border-neutral-800 backdrop-blur-sm">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold">
-                            {session?.user?.name?.[0] || "U"}
+                            {(appUser?.name || user?.user_metadata?.full_name || "U")[0]}
                         </div>
                         <div>
                             <p className="text-sm text-neutral-400">Welcome,</p>
-                            <p className="font-semibold text-white">{session?.user?.name}</p>
+                            <p className="font-semibold text-white">{appUser?.name || user?.user_metadata?.full_name || user?.email}</p>
                         </div>
                     </div>
                     <button
-                        onClick={() => signOut()}
+                        onClick={signOut}
                         className="p-2 hover:bg-neutral-800 rounded-lg transition-colors text-neutral-400 hover:text-white"
                         title="Sign Out"
                     >

@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { supabase } from "@/lib/supabase";
-import type { ExtendedSession } from "@/lib/types";
 
 // GET /api/lectures?subject=Physics&class=10  (traditional)
 // GET /api/lectures?course_id=<uuid>           (new course-based flow)
 // - Teacher: returns ALL their lectures for that subject or course
 // - Student: returns only PUBLISHED lectures matching their class+subject or course
 export async function GET(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.userId) {
+    const authData = await getAuthUser();
+    if (!authData) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const { appUser } = authData;
 
     const { searchParams } = new URL(req.url);
     const subject = searchParams.get("subject");
@@ -20,14 +20,14 @@ export async function GET(req: NextRequest) {
 
     // — Course-based path —
     if (courseId) {
-        if (session.role === "teacher") {
+        if (appUser.role === "teacher") {
             let query = supabase
                 .from("lectures")
                 .select("*")
-                .eq("teacher_id", session.userId)
+                .eq("teacher_id", appUser.id)
                 .eq("course_id", courseId)
                 .order("created_at", { ascending: false });
-            if (session.instituteId) query = query.eq("institute_id", session.instituteId);
+            if (appUser.institute_id) query = query.eq("institute_id", appUser.institute_id);
             const { data, error } = await query;
             if (error) return NextResponse.json({ error: error.message }, { status: 500 });
             return NextResponse.json({ lectures: data });
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
             .eq("course_id", courseId)
             .eq("published", true)
             .order("created_at", { ascending: false });
-        if (session.instituteId) query = query.eq("institute_id", session.instituteId);
+        if (appUser.institute_id) query = query.eq("institute_id", appUser.institute_id);
         const { data, error } = await query;
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
         return NextResponse.json({ lectures: data });
@@ -51,16 +51,16 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "subject or course_id required" }, { status: 400 });
     }
 
-    if (session.role === "teacher") {
+    if (appUser.role === "teacher") {
         let query = supabase
             .from("lectures")
             .select("*")
-            .eq("teacher_id", session.userId)
+            .eq("teacher_id", appUser.id)
             .eq("subject", subject)
             .order("created_at", { ascending: false });
 
         if (classFilter) query = query.eq("class", classFilter);
-        if (session.instituteId) query = query.eq("institute_id", session.instituteId);
+        if (appUser.institute_id) query = query.eq("institute_id", appUser.institute_id);
 
         const { data, error } = await query;
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Student: only published lectures for their class
-    const studentClass = session.class;
+    const studentClass = appUser.class;
     if (!studentClass) {
         return NextResponse.json({ error: "Class not set" }, { status: 400 });
     }
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
         .eq("class", studentClass)
         .eq("published", true)
         .order("created_at", { ascending: false });
-    if (session.instituteId) studentQuery = studentQuery.eq("institute_id", session.instituteId);
+    if (appUser.institute_id) studentQuery = studentQuery.eq("institute_id", appUser.institute_id);
     const { data, error } = await studentQuery;
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -89,10 +89,11 @@ export async function GET(req: NextRequest) {
 
 // POST /api/lectures — create a new lecture (teacher only)
 export async function POST(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.userId || session.role !== "teacher") {
+    const authData = await getAuthUser();
+    if (!authData || authData.appUser.role !== "teacher") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const { appUser } = authData;
 
     const body = await req.json();
     const { title, subject, class: targetClass, content, recording_file_id, audio_insights, course_id } = body;
@@ -109,7 +110,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
         .from("lectures")
         .insert({
-            teacher_id: session.userId,
+            teacher_id: appUser.id,
             title,
             subject: subject || null,
             class: targetClass || null,
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
             recording_file_id: recording_file_id || null,
             audio_insights: audio_insights || null,
             published: false,
-            institute_id: session.instituteId ?? null,
+            institute_id: appUser.institute_id ?? null,
         })
         .select()
         .single();
@@ -129,8 +130,8 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/lectures — publish/unpublish or update
 export async function PATCH(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.userId || session.role !== "teacher") {
+    const authData = await getAuthUser();
+    if (!authData || authData.appUser.role !== "teacher") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -150,7 +151,7 @@ export async function PATCH(req: NextRequest) {
         .from("lectures")
         .update(updateData)
         .eq("id", id)
-        .eq("teacher_id", session.userId)
+        .eq("teacher_id", authData.appUser.id)
         .select()
         .single();
 
@@ -160,8 +161,8 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/lectures?id=...
 export async function DELETE(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.userId || session.role !== "teacher") {
+    const authData = await getAuthUser();
+    if (!authData || authData.appUser.role !== "teacher") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -176,7 +177,7 @@ export async function DELETE(req: NextRequest) {
         .from("lectures")
         .delete()
         .eq("id", id)
-        .eq("teacher_id", session.userId);
+        .eq("teacher_id", authData.appUser.id);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true });

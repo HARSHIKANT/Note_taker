@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { supabase } from "@/lib/supabase";
-import type { ExtendedSession } from "@/lib/types";
 
 // POST /api/institutes — Register a new institute (called from /register-institute page)
 // The authed user becomes the head_teacher of the new institute.
 export async function POST(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.userId || !session?.user?.email) {
+    const authData = await getAuthUser();
+    if (!authData) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const { appUser } = authData;
 
     // Prevent a user from creating a second institute if they already belong to one
-    if (session.instituteId) {
+    if (appUser.institute_id) {
         return NextResponse.json({ error: "You already belong to an institute" }, { status: 400 });
     }
 
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     // Add the creator to the roster as head_teacher
     await supabase.from("institute_members").insert({
         institute_id: institute.id,
-        email: session.user.email,
+        email: authData.email,
         role: "head_teacher",
     });
 
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
             role: "teacher",
             is_head_teacher: true,
         })
-        .eq("id", session.userId);
+        .eq("id", appUser.id);
 
     if (userError) {
         return NextResponse.json({ error: userError.message }, { status: 500 });

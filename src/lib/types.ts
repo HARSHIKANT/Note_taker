@@ -1,38 +1,21 @@
-import { Session } from "next-auth";
-import { JWT } from "next-auth/jwt";
-
 export const CLASSES = ["5", "6", "7", "8", "9", "10"] as const;
 export const SUBJECTS = ["Physics", "Chemistry", "Math"] as const;
 
 export type ClassValue = (typeof CLASSES)[number];
 export type SubjectValue = (typeof SUBJECTS)[number];
 
-export interface ExtendedSession extends Session {
-    accessToken?: string;
-    error?: string;
-    userId?: string;
-    role?: "student" | "teacher" | null;
-    class?: ClassValue | null;
-    isHeadTeacher?: boolean;
-    geminiApiKey?: string | null;
-    enrolledCourses?: string[] | null;  // array of course UUIDs
-    instituteId?: string | null;
-    instituteName?: string | null;
-    assignedSubjects?: string[] | null; // for teachers: subjects they teach
-}
-
-export interface ExtendedToken extends JWT {
-    accessToken?: string;
-    refreshToken?: string;
-    accessTokenExpires?: number;
-    error?: string;
-    userId?: string;
-    role?: "student" | "teacher" | null;
-    class?: ClassValue | null;
-    isHeadTeacher?: boolean;
-    geminiApiKey?: string | null;
-    enrolledCourses?: string[] | null;
-    instituteId?: string | null;
-    instituteName?: string | null;
-    assignedSubjects?: string[] | null;
+// Mirrors the public.users table
+export interface AppUser {
+    id: string;
+    email: string;
+    name: string | null;
+    avatar_url: string | null;
+    role: "student" | "teacher" | null;
+    class: ClassValue | null;
+    is_head_teacher: boolean;
+    gemini_api_key: string | null;
+    enrolled_courses: string[] | null;
+    institute_id: string | null;
+    assigned_subjects: string[] | null;
+    google_refresh_token: string | null;
 }

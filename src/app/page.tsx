@@ -1,32 +1,32 @@
 
-import { auth } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { LandingHero } from "@/components/LandingHero";
 import { StudentDashboard } from "@/components/StudentDashboard";
 import { TeacherDashboard } from "@/components/TeacherDashboard";
 import { UnregisteredScreen } from "@/components/UnregisteredScreen";
 import { supabase } from "@/lib/supabase";
-import type { ExtendedSession } from "@/lib/types";
 
 // Always run fresh — never serve a cached version of this page
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const session = (await auth()) as ExtendedSession | null;
+  const supabaseAuth = await createClient();
+  const { data: { user } } = await supabaseAuth.auth.getUser();
 
-  if (!session?.user?.email) {
+  if (!user?.email) {
     return <LandingHero />;
   }
 
   // Read the CURRENT state of the user directly from the DB
-  // (bypasses JWT caching so curriculum changes are always reflected immediately)
+  // (bypasses caching so curriculum changes are always reflected immediately)
   const { data: dbUser } = await supabase
     .from("users")
     .select("role, class, enrolled_courses, assigned_subjects, is_head_teacher")
-    .eq("email", session.user.email)
+    .eq("email", user.email)
     .single();
 
-  const role = dbUser?.role ?? session.role ?? null;
+  const role = dbUser?.role ?? null;
 
   // Signed in but not recognised in our system at all
   if (!role) {

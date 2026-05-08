@@ -1,7 +1,6 @@
 
 "use client";
 
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Building2, GraduationCap, Sparkles, Shield, BookOpen } from "lucide-react";
 
@@ -68,10 +67,10 @@ export function LandingHero() {
                             </button>
                             {/* Returning Head Teacher */}
                             <button
-                                onClick={() => signIn("google", { callbackUrl: "/" })}
+                                onClick={() => router.push("/login")}
                                 className="w-full flex items-center justify-between px-5 py-3 rounded-xl bg-white/5 border border-white/10 text-gray-300 text-sm hover:bg-white/10 hover:text-white transition-all"
                             >
-                                <span>Sign In with Google</span>
+                                <span>Sign In</span>
                                 <ArrowRight className="w-4 h-4" />
                             </button>
                         </div>
@@ -86,7 +85,7 @@ export function LandingHero() {
                             <div>
                                 <h2 className="text-xl font-bold text-white">Student / Teacher</h2>
                                 <p className="text-sm text-gray-400 mt-1">
-                                    Your institute has already registered you. Sign in with the Google account your Head Teacher added.
+                                    Your institute has already registered you. Sign in with your email or Google account.
                                 </p>
                             </div>
                         </div>
@@ -99,10 +98,10 @@ export function LandingHero() {
 
                         <div className="mt-auto">
                             <button
-                                onClick={() => signIn("google", { callbackUrl: "/" })}
+                                onClick={() => router.push("/login")}
                                 className="cursor-pointer group/btn relative w-full px-5 py-3.5 bg-white text-black font-semibold rounded-xl overflow-hidden hover:scale-[1.02] transition-transform duration-300 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] flex items-center justify-between"
                             >
-                                <span>Sign In with Google</span>
+                                <span>Sign In</span>
                                 <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
                                 <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/30 to-transparent translate-x-[-200%] group-hover/btn:translate-x-[200%] transition-transform duration-1000 pointer-events-none" />
                             </button>

@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { supabase } from "@/lib/supabase";
-import type { ExtendedSession } from "@/lib/types";
 
 // Guard: only Head Teachers of a specific institute can manage their own roster.
 async function getHeadTeacherSession() {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.userId || !session.isHeadTeacher || !session.instituteId) {
+    const authData = await getAuthUser();
+    if (!authData || !authData.appUser.is_head_teacher || !authData.appUser.institute_id) {
         return null;
     }
-    return session;
+    return authData;
 }
 
 // GET /api/roster — list all roster members for the head teacher's institute
@@ -20,7 +19,7 @@ export async function GET() {
     const { data, error } = await supabase
         .from("institute_members")
         .select("id, email, role")
-        .eq("institute_id", session.instituteId)
+        .eq("institute_id", session.appUser.institute_id)
         .order("role", { ascending: true });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -41,11 +40,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
-    // Upsert — if email already exists in this institute, update their role
     const { data, error } = await supabase
         .from("institute_members")
         .upsert(
-            { institute_id: session.instituteId, email: email.trim().toLowerCase(), role },
+            { institute_id: session.appUser.institute_id, email: email.trim().toLowerCase(), role },
             { onConflict: "institute_id, email" }
         )
         .select("id, email, role")
@@ -58,7 +56,7 @@ export async function POST(req: NextRequest) {
         .from("users")
         .update({
             role: role === "head_teacher" ? "teacher" : role,
-            institute_id: session.instituteId,
+            institute_id: session.appUser.institute_id,
             is_head_teacher: role === "head_teacher",
         })
         .eq("email", email.trim().toLowerCase());
@@ -78,12 +76,11 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
-    // Fetch the member's email for user row sync
     const { data: member } = await supabase
         .from("institute_members")
         .select("email")
         .eq("id", id)
-        .eq("institute_id", session.instituteId)
+        .eq("institute_id", session.appUser.institute_id)
         .single();
 
     if (!member) return NextResponse.json({ error: "Member not found" }, { status: 404 });
@@ -92,11 +89,10 @@ export async function PUT(req: NextRequest) {
         .from("institute_members")
         .update({ role })
         .eq("id", id)
-        .eq("institute_id", session.instituteId);
+        .eq("institute_id", session.appUser.institute_id);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // Sync role to users table
     await supabase
         .from("users")
         .update({
@@ -118,28 +114,23 @@ export async function DELETE(req: NextRequest) {
 
     if (!id) return NextResponse.json({ error: "Member ID required" }, { status: 400 });
 
-    // 1) Fetch the member's email BEFORE deleting (needed for cascade revoke)
     const { data: member } = await supabase
         .from("institute_members")
         .select("email, role")
         .eq("id", id)
-        .eq("institute_id", session.instituteId)
+        .eq("institute_id", session.appUser.institute_id)
         .single();
 
     if (!member) return NextResponse.json({ error: "Member not found" }, { status: 404 });
 
-    // 2) Delete from the roster
     const { error } = await supabase
         .from("institute_members")
         .delete()
         .eq("id", id)
-        .eq("institute_id", session.instituteId);
+        .eq("institute_id", session.appUser.institute_id);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // 3) REVOKE ACCESS: nullify the user's role and institute binding in the users table.
-    //    This means even if their JWT is still active, the next sign-in will see role=null
-    //    and auth.ts will route them to <UnregisteredScreen />.
     await supabase
         .from("users")
         .update({

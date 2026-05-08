@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/app/providers";
 
 interface ApiKeyModalProps {
     onSaved: () => void;
 }
 
 export default function ApiKeyModal({ onSaved }: ApiKeyModalProps) {
-    const { update } = useSession();
+    const { refreshAppUser } = useAuth();
     const [key, setKey] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -30,8 +30,7 @@ export default function ApiKeyModal({ onSaved }: ApiKeyModalProps) {
                 const data = await res.json();
                 throw new Error(data.error || "Failed to save API key.");
             }
-            // Pass geminiApiKey directly into the JWT token — no DB re-fetch needed
-            await update({ geminiApiKey: key.trim() });
+            await refreshAppUser();
             onSaved();
         } catch (err: any) {
             setError(err.message);

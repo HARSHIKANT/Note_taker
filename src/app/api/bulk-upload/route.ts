@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { google } from "googleapis";
 import { supabase } from "@/lib/supabase";
 import { Readable } from "stream";
-import type { ExtendedSession } from "@/lib/types";
 
 // Helper: Find folder by name and parent
 async function findFolder(drive: any, name: string, parentId?: string) {
@@ -44,12 +43,16 @@ async function createFolder(drive: any, name: string, parentId?: string) {
 }
 
 export async function POST(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.accessToken) {
+    const authData = await getAuthUser();
+    if (!authData) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const accessToken = session.accessToken;
+    const refreshToken = authData.appUser.google_refresh_token;
+    if (!refreshToken) {
+        return NextResponse.json({ error: "Google Drive not connected. Sign in with Google to enable Drive uploads." }, { status: 403 });
+    }
+
     const ownerEmail = process.env.OWNER_EMAIL;
 
     if (!ownerEmail) {
@@ -74,8 +77,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "No files provided" }, { status: 400 });
     }
 
-    const authClient = new google.auth.OAuth2();
-    authClient.setCredentials({ access_token: accessToken });
+    const authClient = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET
+    );
+    authClient.setCredentials({ refresh_token: refreshToken });
     const drive = google.drive({ version: "v3", auth: authClient });
 
     try {
@@ -165,8 +171,8 @@ export async function POST(req: NextRequest) {
 
         // Log to Supabase with new fields (ONE row for entire batch)
         const insertData: Record<string, unknown> = {
-            student_email: session.user?.email,
-            student_id: session.userId || null,
+            student_email: authData.email,
+            student_id: authData.appUser.id || null,
             subject,
             file_id: JSON.stringify(fileIds), // array mapping
             status: "pending",

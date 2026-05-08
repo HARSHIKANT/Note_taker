@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { uploadRecordingToFileManager } from "@/lib/google-ai";
 import { createClient } from "@supabase/supabase-js";
-import type { ExtendedSession } from "@/lib/types";
 
 const adminSupabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,7 +16,8 @@ const adminSupabase = createClient(
 // It does NOT call generateContent (which would timeout on Vercel free tier).
 // The client (browser) handles the actual chunked transcription loop directly via the Gemini SDK.
 export async function POST(req: NextRequest) {
-  const session = (await auth()) as ExtendedSession | null;
+  const authData = await getAuthUser();
+    const session = authData ? { userId: authData.appUser.id, role: authData.appUser.role, isHeadTeacher: authData.appUser.is_head_teacher, instituteId: authData.appUser.institute_id, geminiApiKey: authData.appUser.gemini_api_key, accessToken: "present", user: { email: authData.email } } : null;
   if (!session?.accessToken || session.role !== "teacher") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -56,7 +56,8 @@ export async function POST(req: NextRequest) {
 // Called by the client after all chunks are successfully transcribed.
 // Cleans up the recordings from both Supabase storage and Google AI File Manager.
 export async function DELETE(req: NextRequest) {
-  const session = (await auth()) as ExtendedSession | null;
+  const authData = await getAuthUser();
+    const session = authData ? { userId: authData.appUser.id, role: authData.appUser.role, isHeadTeacher: authData.appUser.is_head_teacher, instituteId: authData.appUser.institute_id, geminiApiKey: authData.appUser.gemini_api_key, accessToken: "present", user: { email: authData.email } } : null;
   if (!session?.accessToken || session.role !== "teacher") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

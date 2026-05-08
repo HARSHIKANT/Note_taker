@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/app/providers";
 import { GraduationCap, BookMarked, BookOpen, Atom, FlaskConical, Calculator, Check, Loader2, ArrowRight } from "lucide-react";
 import { CLASSES, SUBJECTS } from "@/lib/types";
-import type { ExtendedSession } from "@/lib/types";
 
 interface Course {
     id: string;
@@ -20,11 +19,10 @@ const SUBJECT_ICONS: Record<string, any> = {
 };
 
 export default function RoleSelectPage() {
-    const { data: session, update } = useSession();
-    const extSession = session as unknown as ExtendedSession;
+    const { appUser, refreshAppUser } = useAuth();
     const router = useRouter();
 
-    const role = extSession?.role;
+    const role = appUser?.role;
 
     const [selectedClass, setSelectedClass] = useState<string>("");
     const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
@@ -76,9 +74,8 @@ export default function RoleSelectPage() {
             const data = await res.json();
             if (!res.ok) { setError(data.error || "Something went wrong"); setLoading(false); return; }
 
-            // Refresh JWT so StudentDashboard reads the new class/subjects immediately
-            await update();
-            // page.tsx reads from DB, so the redirect loop cannot return
+            // Refresh the app user state so dashboard reads the new class/subjects immediately
+            await refreshAppUser();
             router.push("/");
 
         } catch {

@@ -1,17 +1,30 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { google } from "googleapis";
 import { supabase } from "@/lib/supabase";
 import { Readable } from "stream";
 
+async function getGoogleAuthClient(refreshToken: string) {
+    const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET
+    );
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+    // This will automatically refresh the access token
+    return oauth2Client;
+}
+
 export async function POST(req: NextRequest) {
-    const session = await auth() as (import("next-auth").Session & { accessToken?: string }) | null;
-    if (!session?.accessToken) {
+    const authData = await getAuthUser();
+    if (!authData) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const accessToken = session.accessToken;
+    const refreshToken = authData.appUser.google_refresh_token;
+    if (!refreshToken) {
+        return NextResponse.json({ error: "Google Drive not connected. Sign in with Google to enable Drive uploads." }, { status: 403 });
+    }
 
     const formData = await req.formData();
     const file = formData.get("file") as File;
@@ -22,14 +35,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
 
-    const authClient = new google.auth.OAuth2();
-    authClient.setCredentials({ access_token: accessToken });
-
+    const authClient = await getGoogleAuthClient(refreshToken);
     const drive = google.drive({ version: "v3", auth: authClient });
 
     try {
         // 1. Find or Create "Notes" folder in root
-        // Note: We don't specify parent for "Notes", so it goes to root.
         let notesFolderId = await findFolder(drive, "Notes");
         if (!notesFolderId) {
             notesFolderId = await createFolder(drive, "Notes");
@@ -73,17 +83,14 @@ export async function POST(req: NextRequest) {
         });
 
         // 5. Save Metadata to Supabase
-        // If supabase fails, we log it but don't fail the whole request
-        // since the file is safely in Drive.
         try {
             const { error: dbError } = await supabase.from("uploads").insert({
-                student_email: session.user?.email,
+                student_email: authData.email,
                 subject: subject,
                 file_id: fileId,
                 status: "pending",
             });
 
-            //supabase saves a file id which you can convert into link by pasting file_id here https://drive.google.com/file/d/{file_id}/view
             if (dbError) console.error("Supabase Insert Error:", dbError);
         } catch (dbErr) {
             console.error("Supabase Exception:", dbErr);
@@ -99,8 +106,6 @@ export async function POST(req: NextRequest) {
 
 // Helper: Find folder by name and parent
 async function findFolder(drive: any, name: string, parentId?: string) {
-    // Escaping single quotes in name is important if names have quotes, 
-    // but for subjects like "Physics" it's fine.
     let query = `mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false`;
     if (parentId) {
         query += ` and '${parentId}' in parents`;

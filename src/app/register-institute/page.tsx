@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useSession, signIn } from "next-auth/react";
+import { useAuth } from "@/app/providers";
 import { useRouter } from "next/navigation";
 import { Building2, ArrowRight, Loader2, Sparkles } from "lucide-react";
 
 export default function RegisterInstitutePage() {
-    const { data: session, status, update } = useSession();
+    const { user, loading: authLoading, refreshAppUser } = useAuth();
     const router = useRouter();
     const [name, setName] = useState("");
     const [loading, setLoading] = useState(false);
@@ -26,14 +26,16 @@ export default function RegisterInstitutePage() {
             const data = await res.json();
             if (!res.ok) { setError(data.error || "Something went wrong"); setLoading(false); return; }
 
-            // Refresh session to pick up new institute data + head_teacher status
-            await update();
+            // Refresh state to pick up new institute data + head_teacher status
+            await refreshAppUser();
             window.location.href = "/";
         } catch {
             setError("Network error. Please try again.");
             setLoading(false);
         }
     };
+
+    const isAuthenticated = !!user;
 
     return (
         <div className="min-h-screen bg-black text-white flex items-center justify-center relative overflow-hidden">
@@ -54,36 +56,36 @@ export default function RegisterInstitutePage() {
                 </div>
 
                 {/* ── Step 1: Sign in first if not authenticated ── */}
-                {status === "loading" && (
+                {authLoading && (
                     <div className="flex justify-center py-6">
                         <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
                     </div>
                 )}
 
-                {status === "unauthenticated" && (
+                {!authLoading && !isAuthenticated && (
                     <div className="space-y-4 p-6 rounded-2xl bg-white/5 border border-white/10">
                         <p className="text-sm text-gray-300 text-center">
-                            First, sign in with the Google account you want to use as the Head Teacher for your institute.
+                            First, sign in with your account to continue as the Head Teacher for your institute.
                         </p>
                         <button
-                            onClick={() => signIn("google", { callbackUrl: "/register-institute" })}
+                            onClick={() => router.push("/login")}
                             className="w-full py-3.5 rounded-xl bg-white text-black font-semibold flex items-center justify-center gap-3 hover:scale-[1.02] transition-all duration-200 shadow-[0_0_30px_-10px_rgba(255,255,255,0.3)]"
                         >
-                            <span>Sign in with Google to continue</span>
+                            <span>Sign in to continue</span>
                             <ArrowRight className="w-5 h-5" />
                         </button>
                     </div>
                 )}
 
                 {/* ── Step 2: Authenticated — show the form ── */}
-                {status === "authenticated" && (
+                {!authLoading && isAuthenticated && (
                     <div className="space-y-4">
-                        {session?.user?.email && (
+                        {user?.email && (
                             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-400">
                                 <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-xs font-bold text-amber-400 uppercase">
-                                    {session.user.name?.[0] || "?"}
+                                    {user.user_metadata?.full_name?.[0] || user.email[0] || "?"}
                                 </div>
-                                <span className="truncate">Registering as <span className="text-white font-medium">{session.user.email}</span></span>
+                                <span className="truncate">Registering as <span className="text-white font-medium">{user.email}</span></span>
                             </div>
                         )}
 

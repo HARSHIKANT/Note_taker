@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { supabase } from "@/lib/supabase";
 import { ocrImageFromDrive, compareNotesWithLecture } from "@/lib/google-ai";
-import type { ExtendedSession } from "@/lib/types";
+import { google } from "googleapis";
 
 // Helper: retry a function with delay on 429 errors
 async function withRetry<T>(
@@ -34,19 +34,39 @@ async function withRetry<T>(
 // POST /api/ocr
 // Body: { upload_id: string, file_ids: string[], lecture_id: string }
 export async function POST(req: NextRequest) {
-    const session = (await auth()) as ExtendedSession | null;
-    if (!session?.accessToken) {
+    const authData = await getAuthUser();
+    if (!authData) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (!session.geminiApiKey) {
+    const geminiApiKey = authData.appUser.gemini_api_key;
+    if (!geminiApiKey) {
         return NextResponse.json(
             { error: "Gemini API key is required. Please add your key in Settings." },
             { status: 403 }
         );
     }
 
-    const geminiApiKey = session.geminiApiKey;
+    // Get a fresh Google access token from the stored refresh token (needed for Drive downloads)
+    let accessToken: string | null = null;
+    const refreshToken = authData.appUser.google_refresh_token;
+    if (refreshToken) {
+        try {
+            const oauth2Client = new google.auth.OAuth2(
+                process.env.GOOGLE_CLIENT_ID,
+                process.env.GOOGLE_CLIENT_SECRET
+            );
+            oauth2Client.setCredentials({ refresh_token: refreshToken });
+            const { token } = await oauth2Client.getAccessToken();
+            accessToken = token ?? null;
+        } catch (e) {
+            console.error("Failed to refresh Google token for Drive access:", e);
+        }
+    }
+
+    if (!accessToken) {
+        return NextResponse.json({ error: "Google Drive access unavailable. Please re-sign in with Google." }, { status: 403 });
+    }
 
     const body = await req.json();
     const { upload_id, file_ids, lecture_id } = body;
@@ -64,7 +84,7 @@ export async function POST(req: NextRequest) {
     try {
         // 1. OCR all images together (with retry on rate limit)
         const ocrText = await withRetry(
-            () => ocrImageFromDrive(session.accessToken!, file_ids, geminiApiKey),
+            () => ocrImageFromDrive(accessToken!, file_ids, geminiApiKey),
             3,
             "OCR"
         );
