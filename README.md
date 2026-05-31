@@ -4,6 +4,30 @@ A **production-grade, AI-powered classroom platform** that combines note grading
 
 ---
 
+## 💡 Why This Exists — The Core Motive
+
+> **How do you know if a student is actually paying attention in class?**
+
+Traditional attendance marks a student as *present*, but presence alone doesn't equal engagement. A student can sit in a classroom for an hour and walk out having absorbed nothing.
+
+NoteTaker solves this with a deceptively simple idea:
+
+> **If a student is truly paying attention, their handwritten notes should closely reflect what the teacher taught.**
+
+Here's how it works end-to-end:
+
+1. **Teacher delivers a lecture** — the transcript is captured via audio upload, live dictation, or manual entry.
+2. **Student takes handwritten notes** — on paper, during or after the class.
+3. **Student uploads photos of their notes** — directly from their phone camera.
+4. **AI does the rest** — Gemini OCR extracts the text from the photos, then compares it against the teacher's lecture transcript and produces:
+   - A **0–100% match score** reflecting how much lecture content the student captured.
+   - A **topic-level breakdown** of what was covered vs. missed.
+   - An **AI-vs-human detection flag** to ensure the notes are genuinely handwritten and not AI-generated.
+
+The result is an objective, scalable signal of **classroom attention and academic engagement** — visible to teachers in real time, without relying on subjective observation.
+
+---
+
 ## 🎯 What it Does
 
 | Role | Core Capability |
