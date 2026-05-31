@@ -1,4 +1,4 @@
-# 📓 NoteTaker AI — by Harshikant Dubey
+# 📓 NoteTaker
 
 A **production-grade, AI-powered classroom platform** that combines note grading, live speech transcription, and teacher performance analytics in a single multi-role web application.
 
